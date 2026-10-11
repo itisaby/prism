@@ -1,5 +1,6 @@
 'use client';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Decor } from './Decor.tsx';
 import { Icon, Logo } from './Icon.tsx';
@@ -26,6 +27,7 @@ export function DecisionView({ id }: { id: string }) {
   const [note, setNote] = useState('');
   const [showRequest, setShowRequest] = useState(false);
   const { push: toast, view: toastView } = useToasts();
+  const router = useRouter();
 
   const load = useCallback(async () => {
     try {
@@ -47,12 +49,18 @@ export function DecisionView({ id }: { id: string }) {
   const wsInfo = workspace ?? bundle?.workspace;
 
   // Poll the decision when the socket isn't live (phone through a tunnel), and while a fix is running.
-  const inFlight = decision?.status === 'approved';
+  const revising = decision?.status === 'rejected' && !!decision.note && !!decision.incidentId && !decision.supersededBy;
+  const inFlight = decision?.status === 'approved' || revising;
   useEffect(() => {
     if (!bundle || (live.mode === 'live' && !inFlight) || live.mode === 'fixture') return;
     const t = setInterval(() => { void load(); }, 2000);
     return () => clearInterval(t);
   }, [bundle, live.mode, inFlight, load]);
+
+  // When the agent's revision arrives, follow it.
+  useEffect(() => {
+    if (decision?.status === 'rejected' && decision.supersededBy) router.replace(`/decide/${decision.supersededBy}${q}`);
+  }, [decision?.status, decision?.supersededBy, q, router]);
 
   const evidence = useEvidence(decision?.workspaceId, decision?.evidence ?? [], live.state.panelData, live.mode);
 
@@ -111,7 +119,9 @@ export function DecisionView({ id }: { id: string }) {
   const replay = decision.source === 'playbook';
   const done = decision.status === 'executed' || decision.status === 'failed';
   const owner = wsInfo ? wsInfo.owner === user : user === 'arnab';
-  const canSave = decision.source === 'agent' && decision.status === 'executed' && !decision.playbookId && !playbook && owner;
+  // A corrected fix can replace a playbook that came from the agent's own first idea.
+  const canSave = decision.source === 'agent' && decision.status === 'executed' && owner &&
+    (!playbook ? !decision.playbookId : !!decision.correction && !playbook.origin.correction);
   const eyebrow = replay ? 'Decision · playbook replay' : decision.source === 'agent' ? 'Decision · found by the agent' : decision.source === 'person' ? 'Decision · requested from a panel' : 'Decision';
 
   return (
@@ -125,7 +135,7 @@ export function DecisionView({ id }: { id: string }) {
           <div className="decide-main">
             <div className="tags">
               {incident && <Badge tone="danger">Incident #{incident.number}</Badge>}
-              {replay ? <Badge tone="accent" icon="repeat">Playbook replay</Badge> : decision.source === 'agent' ? <Badge tone="accent" icon="sparkles">Found by the agent</Badge> : <Badge tone="muted">Requested by a person</Badge>}
+              {replay ? <Badge tone="accent" icon="repeat">Playbook replay</Badge> : decision.correction ? <Badge tone="accent" icon="user-check">Revised from {cap(decision.correction.by)}&apos;s note</Badge> : decision.source === 'agent' ? <Badge tone="accent" icon="sparkles">Found by the agent</Badge> : <Badge tone="muted">Requested by a person</Badge>}
               <StatusBadge status={decision.status} />
             </div>
             <h1 className="decide-title">{decision.title}</h1>
@@ -141,13 +151,25 @@ export function DecisionView({ id }: { id: string }) {
               </div>
             )}
 
+            {decision.correction && (
+              <div className="replay-banner correction-banner">
+                <span className="soft-ic"><Icon name="user-check" size={15} /></span>
+                <b>Follows {cap(decision.correction.by)}&apos;s correction</b>
+                <span className="muted">“{decision.correction.note}”</span>
+                <span className="spacer" />
+                <Badge tone="accent">same agent, resumed</Badge>
+              </div>
+            )}
+
             {done || decision.status === 'approved' ? (
               <DoneCard decision={decision} incident={incident} canSave={canSave} busy={busy} onSave={savePlaybook} playbook={playbook} />
             ) : decision.status === 'rejected' ? (
               <div className="card rejected">
                 <div className="card-head"><span className="soft-ic s-muted"><Icon name="undo" size={16} /></span><div><b>Sent back</b><div className="muted small">{decision.decidedBy ? `by ${cap(decision.decidedBy)} · ${clock(decision.decidedAt)}` : ''}</div></div></div>
                 {decision.note && <blockquote>“{decision.note}”</blockquote>}
-                <p className="muted small">Nothing ran. {decision.note ? 'The agent can propose a different fix using this note.' : ''}</p>
+                {revising && incident?.status !== 'resolved'
+                  ? <p className="small revising"><span className="spinner" /> The agent is revising the fix with your note…</p>
+                  : <p className="muted small">Nothing ran.</p>}
               </div>
             ) : null}
 
@@ -356,6 +378,9 @@ function PlaybookCard({ playbook, workspace }: { playbook: Playbook; workspace?:
       <p className="small ink2">Shows this evidence and proposes: {playbook.actionTemplate.label.toLowerCase()}. A person always approves first.</p>
       </div>
       <div className="origin"><Icon name="history" size={13} />Learned from incident #{playbook.origin.incidentNumber} at {new Date(playbook.origin.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}. Saved by {cap(playbook.origin.savedBy)}{playbook.origin.approvedBy ? `, approved by ${cap(playbook.origin.approvedBy)}` : ''}.</div>
+      {playbook.origin.correction && (
+        <div className="origin origin-correction"><Icon name="user-check" size={13} />The fix follows {cap(playbook.origin.correction.by)}&apos;s correction: “{playbook.origin.correction.note}”, not the agent&apos;s first idea.</div>
+      )}
     </div>
   );
 }

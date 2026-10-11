@@ -611,3 +611,9 @@ a.banner:hover { filter: brightness(1.15); }
   .headline { font-size: 44px; }
   .via { text-align: center; justify-content: center; flex-wrap: wrap; padding: 0 8px; }
 }
+
+/* Correction flow: a revised decision that follows a person's note, and the playbook that learned it. */
+.correction-banner { border-color: var(--accent, #8B6CFF); background: linear-gradient(90deg, rgba(139,108,255,.14), rgba(255,79,163,.06)); }
+.correction-banner .muted { font-style: italic; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.revising { display: flex; align-items: center; gap: 8px; color: var(--accent-ink, #B9A6FF); }
+.origin-correction { color: var(--accent-ink, #B9A6FF); margin-top: 6px; }

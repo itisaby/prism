@@ -148,6 +148,15 @@ export function schedule(w: Workspace) {
   timers.set(w.id, list);
 }
 
+/** Stop a workspace's refresh timers and forget its cached panel data and stats. */
+export function unschedule(wsId: string) {
+  for (const t of timers.get(wsId) ?? []) clearInterval(t);
+  timers.delete(wsId);
+  for (const k of [...lastData.keys()]) if (k.startsWith(`${wsId}|`)) lastData.delete(k);
+  statsCache.delete(wsId);
+  statsDirty.delete(wsId);
+}
+
 export function scheduleAll() {
   for (const w of store.list<Workspace>('workspace')) if (w.panels.length) schedule(w);
 }

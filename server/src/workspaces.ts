@@ -3,7 +3,8 @@ import { randomUUID } from 'node:crypto';
 import type { Op, Panel, Workspace } from '../../shared/types.ts';
 import { activity, broadcast } from './bus.ts';
 import { store } from './db.ts';
-import { evaluate, publicWorkspace, schedule, validatePanel } from './runtime.ts';
+import { evaluate, publicWorkspace, schedule, unschedule, validatePanel } from './runtime.ts';
+import { clearActivity } from './bus.ts';
 
 export class Conflict extends Error {}
 export class Invalid extends Error { constructor(public problems: string[]) { super(problems.join('\n')); } }
@@ -18,6 +19,21 @@ export const canView = (w: Workspace, user: string) => w.owner === user || w.mem
 export const canEdit = (w: Workspace, user: string) => w.owner === user;
 export const listWorkspaces = (user: string) =>
   store.list<Workspace>('workspace').filter(w => canView(w, user)).map(w => ({ id: w.id, title: w.title, owner: w.owner }));
+
+/** Delete a workspace and everything it owns. Connections are per user, not per workspace, so they stay. */
+export function deleteWorkspace(id: string, user: string) {
+  const w = getWorkspace(id);
+  if (!w) return false;
+  if (!canEdit(w, user)) throw new Invalid(['only the owner can delete this workspace']);
+  unschedule(id);
+  for (const kind of ['incident', 'decision', 'playbook', 'agent-transcript'] as const) store.deleteForWorkspace(kind, id);
+  store.delete('stats', id);
+  store.delete('stats', `${id}:incidents`);
+  store.delete('workspace', id);
+  broadcast(id, { type: 'workspace-deleted', workspaceId: id });
+  clearActivity(id);
+  return true;
+}
 
 export function saveWorkspace(w: Workspace) {
   store.put('workspace', w, w.id);

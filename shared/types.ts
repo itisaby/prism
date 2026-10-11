@@ -194,4 +194,5 @@ export type ServerMessage =
   | { type: 'decision'; decision: Decision }
   | { type: 'playbook'; playbook: Playbook }
   | { type: 'stats'; stats: Stats }
-  | { type: 'compose'; state: 'started' | 'done' | 'failed'; summary?: string; receipt?: Receipt };
+  | { type: 'compose'; state: 'started' | 'done' | 'failed'; summary?: string; receipt?: Receipt }
+  | { type: 'workspace-deleted'; workspaceId: string };

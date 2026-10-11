@@ -17,6 +17,7 @@ function blocked(method, path) {
   if (path === '/mcp' || path.startsWith('/mcp/') || path.startsWith('/mcp?')) return 'PRISM MCP is local-only';
   if (path.startsWith('/api/admin')) return 'admin is local-only';
   if (path.startsWith('/api/connections') && method !== 'GET') return 'adding MCP servers is disabled on the public demo';
+  if (method === 'DELETE' && path.startsWith('/api/workspaces/')) return 'deleting workspaces is disabled on the public demo';
   return null;
 }
 

@@ -15,7 +15,7 @@ import { capture } from './telemetry.ts';
 import { searchRegistry } from './registry.ts';
 import { addConnection, discover, listConnections, loadConnections, removeConnection, view } from './mcp.ts';
 import { getStats, latest, loadValidator, publicWorkspace, refreshPanel, scheduleAll, setRawListener } from './runtime.ts';
-import { Conflict, Invalid, applyOps, canEdit, canView, createWorkspace, getWorkspace, listWorkspaces, saveWorkspace } from './workspaces.ts';
+import { Conflict, Invalid, applyOps, canEdit, canView, createWorkspace, deleteWorkspace, getWorkspace, listWorkspaces, saveWorkspace } from './workspaces.ts';
 
 const app = new Hono();
 const userOf = (c: Context) => (c.req.header('x-prism-user') || c.req.query('as') || 'arnab').toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 32) || 'arnab';
@@ -72,6 +72,11 @@ app.get('/api/workspaces/:id', c => {
     stats: getStats(w.id),
     panelData: Object.fromEntries(w.panels.map(p => [p.id, latest(w.id, p.id)]).filter(([, v]) => v)),
   });
+});
+app.delete('/api/workspaces/:id', c => {
+  const w = wsOr404(c);
+  if (!canEdit(w, userOf(c))) throw new Forbidden('only the owner can delete this workspace');
+  return c.json({ ok: deleteWorkspace(w.id, userOf(c)) });
 });
 app.post('/api/workspaces/:id/compose', async c => {
   const w = wsOr404(c);
