@@ -617,3 +617,13 @@ a.banner:hover { filter: brightness(1.15); }
 .correction-banner .muted { font-style: italic; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .revising { display: flex; align-items: center; gap: 8px; color: var(--accent-ink, #B9A6FF); }
 .origin-correction { color: var(--accent-ink, #B9A6FF); margin-top: 6px; }
+
+/* Workspace rows in the rail: delete control appears on hover (always visible on touch). */
+.rail-ws { position: relative; display: flex; align-items: center; }
+.rail-ws .rail-item { flex: 1; min-width: 0; padding-right: 30px; }
+.rail-ws-del { position: absolute; right: 4px; opacity: 0; color: var(--muted, #7D7D7D); }
+.rail-ws:hover .rail-ws-del, .rail-ws-del:focus-visible { opacity: 1; }
+.rail-ws-del:hover { color: var(--danger, #FF6166); }
+@media (hover: none) { .rail-ws-del { opacity: .7; } }
+.modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+.small.bad { color: var(--danger, #FF6166); }

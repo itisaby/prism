@@ -1,5 +1,6 @@
 'use client';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { useFixtureSuffix } from '../lib/useWorkspaceSocket.ts';
 import { Icon, Logo } from './Icon.tsx';
@@ -16,6 +17,10 @@ export function Rail({ activeId, user, playbooks, open, onClose, onConnected, mo
   const [workspaces, setWorkspaces] = useState<{ id: string; title: string; owner: string }[]>([]);
   const [connections, setConnections] = useState<ConnectionView[]>([]);
   const [adding, setAdding] = useState(false);
+  const [deleting, setDeleting] = useState<{ id: string; title: string }>();
+  const [delBusy, setDelBusy] = useState(false);
+  const [delError, setDelError] = useState<string>();
+  const router = useRouter();
   const q = useFixtureSuffix(mode as never);
 
   const load = useCallback(() => {
@@ -23,6 +28,23 @@ export function Rail({ activeId, user, playbooks, open, onClose, onConnected, mo
     loadConnections(true).then(setConnections);
   }, []);
   useEffect(() => { load(); }, [load, mode]);
+
+  const confirmDelete = async () => {
+    if (!deleting) return;
+    setDelBusy(true);
+    setDelError(undefined);
+    try {
+      await api(`/workspaces/${deleting.id}`, { method: 'DELETE' });
+      const rest = workspaces.filter(w => w.id !== deleting.id);
+      setWorkspaces(rest);
+      if (deleting.id === activeId) router.push(rest[0] ? `/w/${rest[0].id}${q}` : `/${q}`);
+      setDeleting(undefined);
+    } catch (e) {
+      setDelError((e as Error).message);
+    } finally {
+      setDelBusy(false);
+    }
+  };
 
   return (
     <>
@@ -34,11 +56,19 @@ export function Rail({ activeId, user, playbooks, open, onClose, onConnected, mo
         <div className="rail-scroll">
           <div className="rail-label">Workspaces</div>
           {workspaces.map(w => (
-            <Link key={w.id} href={`/w/${w.id}${q}`} className={`rail-item ${w.id === activeId ? 'on' : ''}`}>
-              <Icon name="layers" size={15} />
-              <span className="ellipsis">{w.title}</span>
-              {w.owner !== user && <span className="mono rail-meta">shared</span>}
-            </Link>
+            <div key={w.id} className="rail-ws">
+              <Link href={`/w/${w.id}${q}`} className={`rail-item ${w.id === activeId ? 'on' : ''}`}>
+                <Icon name="layers" size={15} />
+                <span className="ellipsis">{w.title}</span>
+                {w.owner !== user && <span className="mono rail-meta">shared</span>}
+              </Link>
+              {w.owner === user && (
+                <button className="icon-btn rail-ws-del" aria-label={`Delete ${w.title}`} title="Delete workspace"
+                  onClick={() => { setDelError(undefined); setDeleting({ id: w.id, title: w.title }); }}>
+                  <Icon name="trash" size={13} />
+                </button>
+              )}
+            </div>
           ))}
           <Link href={`/${q}`} className="rail-item muted"><Icon name="plus" size={15} />New workspace</Link>
 
@@ -70,6 +100,17 @@ export function Rail({ activeId, user, playbooks, open, onClose, onConnected, mo
         <IdentitySwitch user={user} />
       </aside>
       {open && <div className="rail-scrim" onClick={onClose} />}
+      <Modal open={!!deleting} onClose={() => !delBusy && setDeleting(undefined)} title="Delete workspace?">
+        <p className="small">
+          <b>{deleting?.title}</b> will be deleted with its panels, watchers, incidents, decisions and saved playbooks.
+          Its panels stop refreshing. MCP connections stay. This can&apos;t be undone.
+        </p>
+        {delError && <p className="small bad">{delError}</p>}
+        <div className="modal-actions">
+          <button className="btn btn-ghost btn-sm" onClick={() => setDeleting(undefined)} disabled={delBusy}>Cancel</button>
+          <button className="btn btn-danger btn-sm" onClick={confirmDelete} disabled={delBusy}>{delBusy ? 'Deleting…' : 'Delete workspace'}</button>
+        </div>
+      </Modal>
       <AddConnectionDialog open={adding} onClose={() => setAdding(false)} onDone={c => { setAdding(false); load(); onConnected?.(c); }} />
     </>
   );

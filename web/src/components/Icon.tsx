@@ -29,6 +29,7 @@ const P: Record<string, string> = {
   fingerprint: 'M12 11v3a8 8 0 0 1-1.5 4.7M8 14a4 4 0 0 1 8-3M6 17a10 10 0 0 0 1-5 5 5 0 0 1 10 0c0 1.7-.2 3.4-.6 5M4.5 9A8 8 0 0 1 19 8M12 3a9 9 0 0 1 7.5 4',
   activity: 'M22 12h-4l-3 8L9 4l-3 8H2',
   undo: 'M9 14 4 9l5-5M4 9h11a5 5 0 0 1 0 10h-3',
+  trash: 'M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6',
   'chevron-right': 'M9 6l6 6-6 6',
   'chevron-down': 'M6 9l6 6 6-6',
   'chevron-left': 'M15 6l-6 6 6 6',
