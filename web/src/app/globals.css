@@ -587,3 +587,16 @@ a.banner:hover { filter: brightness(1.15); }
   .decide-page .jelly, .decide-page .bubble { display: none; }
   .replay-banner b { font-size: 13.5px; }
 }
+/* panel-width responsive rules (container queries) */
+.panel { container-type: inline-size; }
+.pc-metrics { height: auto; align-content: start; }
+.pc-actions { flex-wrap: nowrap; }
+@container (max-width: 560px) {
+  .panel-head { flex-wrap: wrap; row-gap: 4px; }
+  .panel-head .spacer { display: none; }
+  .panel-head .source { flex-basis: 100%; }
+  .pc-status-row { flex-wrap: wrap; row-gap: 8px; }
+  .pc-status-main { flex: 1 1 60%; }
+  .pc-status-row .pc-actions { flex-basis: 100%; justify-content: flex-start; padding-left: 17px; }
+  .pc-metric-value { font-size: 22px; }
+}
