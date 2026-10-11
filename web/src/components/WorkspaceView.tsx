@@ -14,7 +14,8 @@ import type { Activity, ActivityKind, Decision, Incident, Layout, Receipt, Works
 import { useNow, useUser, useWorkspaceSocket, useFixtureSuffix } from '../lib/useWorkspaceSocket.ts';
 import { useConnectionNames } from '../lib/connections.ts';
 
-const GRID = { cols: 12, rowHeight: 40, margin: [16, 16] as const, containerPadding: [0, 0] as const };
+// Server composer assumes a 12-column grid with rows of ~60px (h 2 for metric rows, 4–6 for tables/charts).
+const GRID = { cols: 12, rowHeight: 64, margin: [14, 14] as const, containerPadding: [0, 0] as const };
 
 export function WorkspaceView({ id }: { id: string }) {
   const router = useRouter();
@@ -168,7 +169,7 @@ function Grid({ workspace, panelData, connections, firing, now, onLayoutChange, 
   onRecordAction: (panelId: string, actionId: string, record: Record<string, unknown>) => void;
 }) {
   const { width, containerRef, mounted } = useContainerWidth({ measureBeforeMount: true });
-  const layout = useMemo(() => workspace.panels.map(p => ({ i: p.id, ...p.layout, minW: 3, minH: 3 })), [workspace.panels]);
+  const layout = useMemo(() => workspace.panels.map(p => ({ i: p.id, ...p.layout, minW: 3, minH: 2 })), [workspace.panels]);
   const name = (cid: string) => connections[cid] ?? cid;
   const narrow = mounted && width < 760;
   return (
@@ -176,7 +177,7 @@ function Grid({ workspace, panelData, connections, firing, now, onLayoutChange, 
       {mounted && (narrow ? (
         <div className="stack">
           {[...workspace.panels].sort((a, b) => a.layout.y - b.layout.y || a.layout.x - b.layout.x).map(p => (
-            <div key={p.id} style={{ minHeight: Math.max(200, p.layout.h * 44) }} className="stack-item">
+            <div key={p.id} style={{ minHeight: Math.max(150, p.layout.h * 66) }} className="stack-item">
               <PanelCard panel={p} datum={panelData[p.id]} sourceName={name(p.binding.connectionId)} firing={firing[p.id]} now={now} onRecordAction={onRecordAction} />
             </div>
           ))}

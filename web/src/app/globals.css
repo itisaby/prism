@@ -600,3 +600,8 @@ a.banner:hover { filter: brightness(1.15); }
   .pc-status-row .pc-actions { flex-basis: 100%; justify-content: flex-start; padding-left: 17px; }
   .pc-metric-value { font-size: 22px; }
 }
+/* compact metric tiles so a 2-row metric panel fits */
+.pc-metric { padding: 9px 12px; gap: 1px; }
+.pc-metric-value { font-size: 23px; line-height: 1.2; }
+.panel { padding: 12px 16px 14px; gap: 10px; }
+.pc-metric-hint { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

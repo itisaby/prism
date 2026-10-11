@@ -21,12 +21,12 @@ function k8s(tool: string, args: Record<string, unknown> = {}, transform = '$') 
 
 const PANELS: Panel[] = [
   {
-    id: 'p-overview', title: 'Cluster overview', refreshSec: 5, layout: { x: 0, y: 0, w: 12, h: 4 },
+    id: 'p-overview', title: 'Cluster overview', refreshSec: 5, layout: { x: 0, y: 0, w: 12, h: 2 },
     binding: k8s('cluster_overview', {}, '{ "metrics": [...] }'),
     components: [{ id: 'root', component: 'MetricRow', items: { path: '/metrics' } }],
   },
   {
-    id: 'p-deploys', title: 'Deployments in shop', refreshSec: 5, layout: { x: 0, y: 4, w: 5, h: 8 },
+    id: 'p-deploys', title: 'Deployments in shop', refreshSec: 5, layout: { x: 0, y: 2, w: 5, h: 6 },
     binding: k8s('list_deployments', { namespace: 'shop' }),
     components: [{ id: 'root', component: 'StatusList', items: { path: '/deployments' },
       }],
@@ -37,7 +37,7 @@ const PANELS: Panel[] = [
     ],
   },
   {
-    id: 'p-pods', title: 'Problem pods', refreshSec: 5, layout: { x: 5, y: 4, w: 7, h: 8 },
+    id: 'p-pods', title: 'Problem pods', refreshSec: 5, layout: { x: 5, y: 2, w: 7, h: 6 },
     binding: k8s('list_pods', { namespace: 'shop', problemsOnly: true }),
     components: [{ id: 'root', component: 'DataTable', rows: { path: '/pods' }, toneKey: 'tone',
       columns: [{ key: 'name', label: 'Pod' }, { key: 'reason', label: 'Reason' }, { key: 'restarts', label: 'Restarts' }, { key: 'age', label: 'Age' }],
@@ -47,7 +47,7 @@ const PANELS: Panel[] = [
     ],
   },
   {
-    id: 'p-cpu', title: 'CPU per app', refreshSec: 10, layout: { x: 0, y: 12, w: 12, h: 7 },
+    id: 'p-cpu', title: 'CPU per app', refreshSec: 10, layout: { x: 0, y: 8, w: 12, h: 5 },
     binding: k8s('get_usage', { namespace: 'shop' }),
     components: [{ id: 'root', component: 'TimeSeries', data: { path: '/rows' }, x: 't', kind: 'line',
       series: APPS.map(a => ({ key: a, label: a })) }],
@@ -79,12 +79,12 @@ function ev(tool: string, args: Record<string, unknown> = {}) {
 }
 const EVENT_PANELS: Panel[] = [
   {
-    id: 'e-overview', title: 'Right now', refreshSec: 10, layout: { x: 0, y: 0, w: 12, h: 4 },
+    id: 'e-overview', title: 'Right now', refreshSec: 10, layout: { x: 0, y: 0, w: 12, h: 2 },
     binding: ev('event_overview'),
     components: [{ id: 'root', component: 'MetricRow', items: { path: '/metrics' } }],
   },
   {
-    id: 'e-help', title: 'Help requests waiting longest', refreshSec: 10, layout: { x: 0, y: 4, w: 7, h: 8 },
+    id: 'e-help', title: 'Help requests waiting longest', refreshSec: 10, layout: { x: 0, y: 2, w: 7, h: 6 },
     binding: ev('list_help_requests', { status: 'open' }),
     components: [{ id: 'root', component: 'DataTable', rows: { path: '/requests' }, toneKey: 'tone',
       columns: [{ key: 'team', label: 'Team' }, { key: 'topic', label: 'Topic' }, { key: 'table', label: 'Table' }, { key: 'waiting', label: 'Waiting' }] }],
@@ -94,13 +94,13 @@ const EVENT_PANELS: Panel[] = [
     ],
   },
   {
-    id: 'e-tasks', title: 'Unclaimed volunteer tasks', refreshSec: 15, layout: { x: 7, y: 4, w: 5, h: 8 },
+    id: 'e-tasks', title: 'Unclaimed volunteer tasks', refreshSec: 15, layout: { x: 7, y: 2, w: 5, h: 6 },
     binding: ev('list_tasks', { claimed: false }),
     components: [{ id: 'root', component: 'CardList', items: { path: '/tasks' }, titleKey: 'title', subtitleKey: 'where', badgeKey: 'when', toneKey: 'tone' }],
     actions: [{ id: 'claim', label: 'Claim', connectionId: 'event', tool: 'claim_task', recordKey: 'id', args: { taskId: { record: 'id' }, volunteer: { user: true } } }],
   },
   {
-    id: 'e-checkins', title: 'Check-ins vs expected', refreshSec: 15, layout: { x: 0, y: 12, w: 12, h: 7 },
+    id: 'e-checkins', title: 'Check-ins vs expected', refreshSec: 15, layout: { x: 0, y: 8, w: 12, h: 5 },
     binding: ev('checkins_by_hour'),
     components: [{ id: 'root', component: 'TimeSeries', data: { path: '/hours' }, x: 'hour', kind: 'bar',
       series: [{ key: 'checkedIn', label: 'Checked in' }, { key: 'expected', label: 'Expected' }] }],
@@ -484,7 +484,7 @@ export async function fixtureRequest(method: string, path: string, body: unknown
   if (is('GET', 'decisions', null)) {
     const d = w.decisions.find(x => x.id === seg[1]) ?? w.decisions[0];
     return { decision: clone(d), incident: clone(w.incidents.find(i => i.id === d.incidentId)) ?? (d.source === 'agent'
-      ? { ...clone(w.incidents[0]), id: 'inc-1', number: 1, decisionId: 'agent', receipt: d.receipt } : undefined),
+      ? { ...clone(w.incidents[0]), id: 'inc-1', number: 1, decisionId: 'agent', receipt: d.receipt, status: d.status === 'executed' ? 'resolved' : 'awaiting-approval', resolvedAt: d.decidedAt } : undefined),
     playbook: clone(w.playbooks.find(p => p.id === d.playbookId)) };
   }
   if (is('POST', 'decisions', null, 'approve')) {

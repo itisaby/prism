@@ -72,7 +72,7 @@ export function HoldButton({ onConfirm, label = 'Hold to approve', busyLabel = '
   };
   const begin = (e: React.PointerEvent) => {
     if (disabled || done) return;
-    (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+    try { (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId); } catch { /* synthetic pointer */ }
     start.current = performance.now();
     const step = (t: number) => {
       const p = Math.min(1, (t - start.current) / holdMs);
