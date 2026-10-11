@@ -689,7 +689,7 @@ const STEPS = [
 
   { id: 'gap', h: 'The Harness', overlay: 'harness',
     pts: [{ t: 'Model every loop' }, { t: 'Paragraphs to humans', cue: ['paragraph'], after: 2600 },
-          { t: 'PRISM compiles once', cue: ['compiles', 'prism compiles'], after: 6000, fx: () => harnessNew(true) }],
+          { t: 'PRISM compiles once', after: 1e9, fx: () => harnessNew(true) }],
     run: () => harnessNew(false),
     say: "Today the model runs every loop and sends you a paragraph, at full price every time. PRISM compiles it once.",
     cues: ['today the model', 'runs every loop', 'every loop'], secs: 7 },
@@ -824,8 +824,14 @@ function harnessNew(on) {
   const ov = $('ov-harness'); clearInterval(hzTimer);
   ov.classList.toggle('is-new', on);
   if (on) return;
-  hzCalls = 0; $('hzCalls').textContent = '0 model calls'; $('hzCost').textContent = '$0.00';
-  hzTimer = setInterval(() => { hzCalls += 1; $('hzCalls').textContent = hzCalls + ' model calls'; $('hzCost').textContent = '$' + (hzCalls * 0.037).toFixed(2); }, 1300);
+  const pl = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+  const paint = () => { $('hzCalls').textContent = pl(hzCalls, 'tool call'); $('hzCost').textContent = `${pl(hzCalls, 'model call')} · $${(hzCalls * 0.037).toFixed(2)}`; };
+  hzCalls = 0; paint();
+  // the old loop runs 8 times, then PRISM takes over the harness
+  hzTimer = setInterval(() => {
+    hzCalls += 1; paint();
+    if (hzCalls >= 8) { clearInterval(hzTimer); const p = STEPS[cur].pts?.[2]; if (STEPS[cur].id === 'gap' && p) setTimeout(() => fire('p2', { ...p, fx: () => { revealPoint(2); p.fx?.(); } }), 900); }
+  }, 750);
 }
 function addFlag(f) { dg.classList.add('f-' + f); const s = STEPS[cur]; s.onFlag?.[f]?.(); }
 function show(keys) { for (const k of keys) dg.querySelectorAll(`[data-k="${k}"]`).forEach(e => e.classList.add('on')); }

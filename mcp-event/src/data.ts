@@ -166,6 +166,8 @@ export function helpTone(r: HelpRequest, now = Date.now()): Tone {
 export const totalCheckedIn = () => [...state.checkins.values()].reduce((a, b) => a + b, 0);
 
 function addCheckins(n: number, now = Date.now()) {
+  n = Math.min(n, EXPECTED_ATTENDANCE - totalCheckedIn()); // never more check-ins than registrations
+  if (n <= 0) return;
   const h = new Date(now).getHours();
   state.checkins.set(h, (state.checkins.get(h) ?? 0) + n);
 }
@@ -299,11 +301,11 @@ const TICK_TOPICS: [string, string][] = [
 
 export function tick(now = Date.now()) {
   const rng = state.rng;
-  // check-ins: 1-2 most ticks, slowing to a trickle near expected attendance
+  // check-ins: 1-2 most ticks, slowing to a trickle near expected attendance, capped at registrations
   const total = totalCheckedIn();
   const p = rng();
   if (total < EXPECTED_ATTENDANCE * 0.96) { if (p < 0.55) addCheckins(1, now); else if (p < 0.8) addCheckins(2, now); }
-  else if (p < 0.05) addCheckins(1, now);
+  else if (total < EXPECTED_ATTENDANCE && p < 0.05) addCheckins(1, now);
 
   // occasionally a new help request (cap the open backlog from the ticker at 6)
   const open = state.help.filter(r => r.status === 'open').length;
