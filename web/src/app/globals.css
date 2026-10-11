@@ -682,3 +682,8 @@ a.banner:hover { filter: brightness(1.15); }
 .view-note { font-size: 12.5px; padding: 6px 10px; border-radius: 8px; }
 .view-note.ok { color: var(--accent-ink, #B9A6FF); background: rgba(139,108,255,.1); }
 .view-note.bad { color: var(--danger, #FF6166); background: rgba(255,97,102,.08); }
+
+/* Actions that ask for a value before approval */
+.needs-input { display: flex; flex-direction: column; gap: 10px; width: 100%; }
+.ni-field { display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; color: var(--ink-2, #A1A1A1); }
+.ni-field .input { font-size: 14px; }

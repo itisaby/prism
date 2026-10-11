@@ -1,4 +1,5 @@
 'use client';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { Decor } from './Decor.tsx';
@@ -6,7 +7,7 @@ import { Icon, Logo } from './Icon.tsx';
 import { PanelCard } from './PanelCard.tsx';
 import { CustomizeBar, PersonalStrip } from './PersonalView.tsx';
 import { Badge, LiveDot } from './ui.tsx';
-import { fixtureMode, setUser } from '../lib/api.ts';
+import { api, fixtureMode, setUser } from '../lib/api.ts';
 import { useConnectionNames } from '../lib/connections.ts';
 import { cap, clock, timeAgo } from '../lib/format.ts';
 import type { Decision } from '../lib/types.ts';
@@ -29,6 +30,16 @@ function JoinInner({ wsId, user }: { wsId: string; user: string }) {
   const now = useNow(1000);
   const { state, mode, error, applyMessage } = useWorkspaceSocket(wsId);
   const [viewNote, setViewNote] = useState<{ text: string; ok: boolean }>();
+  const router = useRouter();
+  // Record actions on the phone: same as desktop — PRISM looks the record up, creates a decision, and you review it.
+  const onRecordAction = async (panelId: string, actionId: string, record: Record<string, unknown>) => {
+    try {
+      const d = await api<{ id: string }>(`/workspaces/${wsId}/panels/${panelId}/actions`, { body: { actionId, record } });
+      router.push(`/decide/${d.id}${q}`);
+    } catch (e) {
+      setViewNote({ text: `Couldn't start that action: ${(e as Error).message}`, ok: false });
+    }
+  };
   const { workspace, decisions, incidents, panelData } = state;
   const names = useConnectionNames();
   const [perm, setPerm] = useState<NotificationPermission | 'unsupported'>('default');
@@ -150,7 +161,7 @@ function JoinInner({ wsId, user }: { wsId: string; user: string }) {
             <div className="mono eyebrow">Live panels</div>
             {[...workspace.panels].sort((a, b) => a.layout.y - b.layout.y || a.layout.x - b.layout.x).map(p => (
               <div key={p.id} className="join-panel">
-                <PanelCard panel={p} datum={panelData[p.id]} sourceName={names[p.binding.connectionId] ?? p.binding.connectionId} now={now} compact />
+                <PanelCard panel={p} datum={panelData[p.id]} sourceName={names[p.binding.connectionId] ?? p.binding.connectionId} now={now} compact onRecordAction={onRecordAction} />
               </div>
             ))}
           </div>

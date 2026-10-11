@@ -214,7 +214,9 @@ export function DecisionView({ id }: { id: string }) {
                 </button>
                 {showRequest && <ExactRequest tool={decision.proposedAction.tool} args={decision.proposedAction.args} />}
                 <div className="action-bar">
-                  <HoldButton onConfirm={approve} disabled={busy} />
+                  {decision.needsInput?.length
+                    ? <NeedsInputForm decision={decision} onFilled={d => setBundle(b => (b ? { ...b, decision: d } : b))} onError={m => toast({ text: m, tone: 'bad' }, 7000)} />
+                    : <HoldButton onConfirm={approve} disabled={busy} />}
                   <div className="action-alt">
                     <button className="link-btn" onClick={() => setRejecting(v => !v)}>Ask for a different fix</button>
                     <span className="spacer" />
@@ -417,4 +419,35 @@ function useEvidence(wsId: string | undefined, panels: Panel[], pushed: Record<s
     out[p.id] = (!a ? b : !b ? a : a.at >= b.at ? a : b) as PanelDatum;
   }
   return out;
+}
+
+/** An action that asked for a value (e.g. which mentor): fill it in, then PRISM validates and dry-runs before you approve. */
+function NeedsInputForm({ decision, onFilled, onError }: { decision: Decision; onFilled: (d: Decision) => void; onError: (m: string) => void }) {
+  const fields = decision.needsInput ?? [];
+  // Suggestions come from the row (e.g. its free mentors); you can type any value — the dry run checks it.
+  const usable = (f: { options?: string[] }) => (f.options ?? []).filter(o => !/^(none|n\/a|-)\b/i.test(o.trim()));
+  const [values, setValues] = useState<Record<string, string>>(() => Object.fromEntries(fields.map(f => [f.arg, usable(f)[0] ?? ''])));
+  const [busy, setBusy] = useState(false);
+  const submit = async () => {
+    setBusy(true);
+    try { onFilled(await api<Decision>(`/decisions/${decision.id}/inputs`, { body: { values } })); }
+    catch (e) { onError((e as Error).message); }
+    finally { setBusy(false); }
+  };
+  return (
+    <form className="needs-input" onSubmit={e => { e.preventDefault(); void submit(); }}>
+      <div className="small muted">This action needs {fields.length === 1 ? 'one choice' : 'a few choices'} from you before PRISM checks it.</div>
+      {fields.map(f => (
+        <label key={f.arg} className="ni-field">
+          <span>{f.label}</span>
+          <input className="input" list={`ni-${f.arg}`} value={values[f.arg]} autoFocus
+            onChange={e => setValues(v => ({ ...v, [f.arg]: e.target.value }))}
+            placeholder={usable(f).length ? `e.g. ${usable(f).join(', ')}` : `Type a ${f.label.toLowerCase()}`} />
+          <datalist id={`ni-${f.arg}`}>{usable(f).map(o => <option key={o} value={o} />)}</datalist>
+          {f.options?.length && !usable(f).length ? <span className="small muted">Suggested: {f.options.join(', ')}</span> : null}
+        </label>
+      ))}
+      <button className="btn btn-primary" disabled={busy || fields.some(f => !String(values[f.arg] ?? '').trim())}>{busy ? 'Checking…' : 'Continue · run the dry run'}</button>
+    </form>
+  );
 }

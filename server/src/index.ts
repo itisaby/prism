@@ -9,7 +9,7 @@ import { compose, composeView } from './composer.ts';
 import { ViewInvalid, applyViewOps, broadcastPanelData, broadcastWorkspace, dataFor, effectiveWorkspace, resetView } from './views.ts';
 import { config } from './config.ts';
 import { store } from './db.ts';
-import { BadRequest, Forbidden, approve, decisionFromRecordAction, getDecision, refreshEvidence, reject, savePlaybook } from './decisions.ts';
+import { BadRequest, Forbidden, approve, decisionFromRecordAction, getDecision, provideInputs, refreshEvidence, reject, savePlaybook } from './decisions.ts';
 import { investigate, onPanelRaw, resetWorkspace, setAutoInvestigate } from './incidents.ts';
 import { prismMcp } from './prism-mcp.ts';
 import { capture } from './telemetry.ts';
@@ -155,6 +155,10 @@ app.get('/api/decisions/:id', c => {
   const playbook = d.playbookId ? playbooks.find(p => p.id === d.playbookId)
     : incident ? playbooks.find(p => p.match.watcherId === incident.watcherId && p.match.resource === incident.resource) : undefined;
   return c.json({ decision: d, incident, playbook, workspace: { id: w.id, title: w.title, owner: w.owner } });
+});
+app.post('/api/decisions/:id/inputs', async c => {
+  const body = await c.req.json().catch(() => ({}));
+  return c.json(await provideInputs(c.req.param('id'), userOf(c), body.values ?? {}));
 });
 app.post('/api/decisions/:id/approve', async c => c.json(await approve(c.req.param('id'), userOf(c))));
 app.post('/api/decisions/:id/reject', async c => {

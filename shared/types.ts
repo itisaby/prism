@@ -34,7 +34,9 @@ export interface Binding {
 export interface Layout { x: number; y: number; w: number; h: number }
 
 /** Where a record action's argument comes from, resolved server-side. */
-export type ArgSource = { record: string } | { value: unknown } | { user: true };
+export type ArgSource = { record: string } | { value: unknown } | { user: true }
+  /** Ask the person when they start the action; options come from a record field (array or comma list) or a fixed list. */
+  | { ask: string; optionsFrom?: string; options?: string[] };
 
 export interface RecordAction {
   id: string;
@@ -172,6 +174,8 @@ export interface Decision {
   revisionOf?: string;    // the decision a person sent back, which this one replaces
   supersededBy?: string;  // set on a sent-back decision once the agent's revision exists
   correction?: { by: User; note: string }; // the person's instruction this revision follows
+  /** Arguments the person must fill in before the dry run and approval (from `ask` action args). */
+  needsInput?: { arg: string; label: string; options?: string[] }[];
 }
 
 export interface Playbook {

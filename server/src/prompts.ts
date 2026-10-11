@@ -30,7 +30,9 @@ wrap single results in [ ] when you need an array: {"rows": [rows[...]]}. Missin
 If a tool returns JSON as a string (e.g. web extract {"content": "{...}"}), parse it with $eval(content).
 
 # Record actions (write tools, always human-approved)
-actions = [{id, label, connectionId, tool, recordKey, args: {argName: {"record":"field"} | {"value": literal} | {"user": true}}, when?: {key, equals}}]
+actions = [{id, label, connectionId, tool, recordKey, args: {argName: {"record":"field"} | {"value": literal} | {"user": true} | {"ask": "Label", "optionsFrom"?: "rowField", "options"?: [..]}}, when?: {key, equals}}]
+{"user": true} means the person clicking (e.g. an approver name). When a person must CHOOSE a value (which mentor, which volunteer),
+use {"ask": "Mentor", "optionsFrom": "mentors"} — PRISM asks them before the dry run; optionsFrom names a row field holding choices.
 Use them on DataTable/CardList/StatusList panels whose rows identify a resource, e.g. a "Restart" action on deployments:
 {"id":"restart","label":"Restart","connectionId":"k8s","tool":"restart_deployment","recordKey":"name","args":{"namespace":{"record":"namespace"},"name":{"record":"name"}}}
 Every row field used in args must exist in the panel's data rows.

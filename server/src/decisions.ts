@@ -79,7 +79,7 @@ export async function dryRun(a: ProposedAction, user: string): Promise<Decision[
 // ---------------------------------------------------------------- creating decisions
 export async function createDecision(input: Omit<Decision, 'id' | 'status' | 'createdAt' | 'dryRun'> & { id?: string }, user: string) {
   const d: Decision = { ...input, id: input.id ?? `d-${randomUUID().slice(0, 8)}`, status: 'pending', createdAt: new Date().toISOString() };
-  d.dryRun = await dryRun(d.proposedAction, user);
+  if (!d.needsInput?.length) d.dryRun = await dryRun(d.proposedAction, user); // with missing inputs the dry run waits for the person
   saveDecision(d);
   activity(d.workspaceId, 'decision', `Decision waiting: ${d.title}${d.dryRun ? ` · dry run ${d.dryRun.ok ? 'passed' : 'failed'}` : ''}`, { decisionId: d.id });
   return d;
@@ -94,8 +94,9 @@ export async function decisionFromRecordAction(w: Workspace, user: string, panel
   const key = record?.[action.recordKey];
   const serverRecord = findRecord(latest(w.id, panelId)?.data, action.recordKey, key);
   if (!serverRecord) throw new BadRequest(`record ${action.recordKey}=${String(key)} is not in this panel's current data`);
-  const args = resolveArgs(action, serverRecord, user);
+  const { args, needsInput } = resolveArgs(action, serverRecord, user);
   return createDecision({
+    needsInput: needsInput.length ? needsInput : undefined,
     workspaceId: w.id, title: `${action.label} ${String(key)}`,
     summary: `${user} asked to run ${action.label.toLowerCase()} on ${String(key)}. It runs only after approval.`,
     rationale: 'Requested from a panel action.', evidence: [],
@@ -118,13 +119,43 @@ function findRecord(data: unknown, key: string, value: unknown): Record<string, 
 }
 
 function resolveArgs(a: RecordAction, record: Record<string, unknown>, user: string) {
-  const out: Record<string, unknown> = {};
+  const args: Record<string, unknown> = {};
+  const needsInput: NonNullable<Decision['needsInput']> = [];
   for (const [k, src] of Object.entries(a.args)) {
-    if ('record' in src) out[k] = record[src.record];
-    else if ('value' in src) out[k] = src.value;
-    else if ('user' in src) out[k] = user;
+    if ('record' in src) args[k] = record[src.record];
+    else if ('value' in src) args[k] = src.value;
+    else if ('user' in src) args[k] = user;
+    else if ('ask' in src) {
+      const raw = src.optionsFrom ? record[src.optionsFrom] : src.options;
+      const options = Array.isArray(raw) ? raw.map(String) : typeof raw === 'string' ? raw.split(/[,;]\s*/).filter(Boolean) : undefined;
+      needsInput.push({ arg: k, label: src.ask, ...(options?.length ? { options } : {}) });
+    }
   }
-  return out;
+  return { args, needsInput };
+}
+
+/** The person filled in the values an action asked for: complete the arguments, then validate and dry-run as usual. */
+export async function provideInputs(id: string, user: string, values: Record<string, unknown>) {
+  const d = getDecision(id);
+  if (!d) throw new BadRequest('unknown decision');
+  const w = getWorkspace(d.workspaceId)!;
+  if (!canView(w, user)) throw new Forbidden('not an approver');
+  if (d.status !== 'pending' || !d.needsInput?.length) return d;
+  const schema: any = toolInfo(d.proposedAction.connectionId, d.proposedAction.tool)?.inputSchema ?? {};
+  const args = { ...d.proposedAction.args };
+  for (const n of d.needsInput) {
+    let v = values?.[n.arg];
+    if (v === undefined || v === '') throw new BadRequest(`${n.label} is required`);
+    const t = schema.properties?.[n.arg]?.type;
+    if ((t === 'number' || t === 'integer') && typeof v === 'string' && v.trim() !== '' && !Number.isNaN(Number(v))) v = Number(v);
+    args[n.arg] = v;
+  }
+  const filled: Decision = { ...d, needsInput: undefined, proposedAction: { ...d.proposedAction, args, label: d.proposedAction.label } };
+  const problems = await validateAction(filled.proposedAction, w.owner);
+  if (problems.length) throw new BadRequest(problems.join('; '));
+  filled.dryRun = await dryRun(filled.proposedAction, w.owner);
+  activity(d.workspaceId, 'decision', `${user} filled in ${d.needsInput.map(n => n.label).join(', ')} · dry run ${filled.dryRun ? (filled.dryRun.ok ? 'passed' : 'failed') : 'n/a'}`);
+  return saveDecision(filled);
 }
 
 // ---------------------------------------------------------------- approve / reject
@@ -140,6 +171,7 @@ async function approveInner(id: string, user: string) {
   const w = getWorkspace(d.workspaceId)!;
   if (!canView(w, user)) throw new Forbidden('you are not an approver on this workspace');
   if (d.status !== 'pending' || inFlight.has(id)) return d; // single use: PRISM enforces it even though the gateway token lives 30 s
+  if (d.needsInput?.length) throw new BadRequest(`Fill in ${d.needsInput.map(n => n.label).join(', ')} first`);
   inFlight.add(id);
   try {
     d.status = 'approved'; d.decidedBy = user; d.decidedAt = new Date().toISOString();
