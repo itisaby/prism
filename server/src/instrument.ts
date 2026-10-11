@@ -12,7 +12,12 @@ if (process.env.SENTRY_DSN) {
   Sentry.init({
     dsn: process.env.SENTRY_DSN,
     environment: process.env.SENTRY_ENVIRONMENT || 'hackathon',
-    tracesSampleRate: 1.0,
+    // Keep agent runs, approvals and playbook replays (and everything inside them); drop the
+    // every-few-seconds panel refresh traffic, which would bury them.
+    tracesSampler: ({ name, parentSampled }) => {
+      if (parentSampled !== undefined) return parentSampled;
+      return /^(invoke_agent|approve decision|replay playbook)/.test(name) ? 1 : 0;
+    },
     integrations: [Sentry.anthropicAIIntegration({ recordInputs: true, recordOutputs: true })],
   });
   console.log('Sentry on (AI agent monitoring + errors)');

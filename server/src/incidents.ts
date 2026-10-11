@@ -14,6 +14,22 @@ export let autoInvestigate = true;
 const clearCounts = new Map<string, number>(); // incident id → consecutive healthy evaluations
 const seenCounts = new Map<string, number>();  // `${wsId}|${watcherId}|${resource}` → consecutive failing evaluations
 const investigating = new Set<string>();
+// Budget guard for automatic investigations: a per-workspace cooldown and a daily cap. Incidents beyond it stay
+// open and can still be investigated manually (POST /api/incidents/:id/investigate).
+const AUTO_COOLDOWN_MS = Number(process.env.PRISM_AUTO_COOLDOWN_SEC ?? 180) * 1000;
+const AUTO_DAILY_CAP = Number(process.env.PRISM_MAX_AUTO_INVESTIGATIONS ?? 30);
+const lastAuto = new Map<string, number>();
+let autoToday = { day: new Date().toDateString(), n: 0 };
+function autoAllowed(wsId: string) {
+  const today = new Date().toDateString();
+  if (autoToday.day !== today) autoToday = { day: today, n: 0 };
+  if (autoToday.n >= AUTO_DAILY_CAP) return 'daily cap reached';
+  const since = Date.now() - (lastAuto.get(wsId) ?? 0);
+  if (since < AUTO_COOLDOWN_MS) return `cooldown (${Math.ceil((AUTO_COOLDOWN_MS - since) / 1000)} s left)`;
+  lastAuto.set(wsId, Date.now());
+  autoToday.n++;
+  return undefined;
+}
 
 const REASON_ALIASES: Record<string, string> = { ErrImagePull: 'ImagePullBackOff', InvalidImageName: 'ImagePullBackOff' };
 
@@ -96,8 +112,11 @@ function openIncident(w: Workspace, wt: Watcher, f: { resource: string; reason: 
     const fresh = store.get<Incident>('incident', i.id);
     if (!fresh || fresh.status !== 'open' || fresh.decisionId) return;
     const later = findPlaybook(w.id, fresh);
-    if (later) void replayPlaybook(fresh, later);
-    else if (autoInvestigate) void investigate(fresh.id);
+    if (later) return void replayPlaybook(fresh, later);
+    if (!autoInvestigate) return;
+    const blocked = autoAllowed(w.id);
+    if (blocked) activity(w.id, 'incident', `Incident #${fresh.number} left for a person to investigate: ${blocked}`);
+    else void investigate(fresh.id);
   }, 6000);
 }
 
@@ -254,6 +273,7 @@ export async function investigate(incidentId: string): Promise<Decision | undefi
 // ---------------------------------------------------------------- demo reset
 export function resetWorkspace(wsId: string, keepPlaybooks: boolean) {
   for (const i of store.list<Incident>('incident', wsId)) clearCounts.delete(i.id);
+  lastAuto.delete(wsId);
   store.deleteForWorkspace('incident', wsId);
   store.deleteForWorkspace('decision', wsId);
   store.deleteForWorkspace('agent-transcript', wsId);
