@@ -155,7 +155,7 @@ export function DecisionView({ id }: { id: string }) {
               <div className="section-head"><h2>Live evidence</h2><span className="muted small">refreshes from the tools, no model</span></div>
               <div className="evidence-grid">
                 {decision.evidence.map(p => (
-                  <div key={p.id} className={`ev-item ${p.layout && p.layout.w >= 12 ? 'ev-wide' : ''}`}>
+                  <div key={p.id} className={`ev-item ${decision.evidence.length === 1 || (p.layout && p.layout.w >= 12) ? 'ev-wide' : ''}`}>
                     <PanelCard panel={p} datum={evidence[p.id]} sourceName={names[p.binding.connectionId] ?? p.binding.connectionId} now={now} compact />
                   </div>
                 ))}
@@ -166,7 +166,7 @@ export function DecisionView({ id }: { id: string }) {
             {decision.status === 'pending' && (
               <section className="card action-card">
                 <div className="card-head">
-                  <span className="soft-ic"><Icon name="undo" size={16} /></span>
+                  <span className="soft-ic"><Icon name={/roll\s?back|undo|revert/i.test(decision.proposedAction.label) ? 'undo' : 'zap'} size={16} /></span>
                   <div className="grow">
                     <b className="action-label">{decision.proposedAction.label}</b>
                     <div className="muted small">Runs through agentgateway with your signed approval</div>
@@ -217,7 +217,7 @@ export function DecisionView({ id }: { id: string }) {
             {playbook && <PlaybookCard playbook={playbook} workspace={workspace} />}
             {!playbook && (
               <div className="card">
-                <div className="card-head"><span className="soft-ic"><Icon name="activity" size={16} /></span><div><b>This incident so far</b><div className="muted small">{receiptLine(decision.receipt)}</div></div></div>
+                <div className="card-head"><span className="soft-ic"><Icon name="activity" size={16} /></span><div><b>{decision.incidentId ? 'This incident so far' : 'This request'}</b><div className="muted small">{receiptLine(decision.receipt)}</div></div></div>
                 <p className="muted small">{decision.source === 'agent'
                   ? 'The agent investigated with read-only tools and proposed one action. Once approved, it can be saved as a playbook so the next one costs nothing.'
                   : 'A person asked for this action from a panel. It runs only after an approver signs it.'}</p>
@@ -290,7 +290,7 @@ function DoneCard({ decision, incident, canSave, busy, onSave, playbook }: { dec
       <ol className="timeline">
         <TL icon="fingerprint" tone="accent" title={`Approved by ${cap(decision.decidedBy ?? 'you')}`} detail={`${clock(decision.decidedAt)} · signed approval`} done />
         <TL icon="shield" tone={running ? 'muted' : 'ok'} title="Checked at the gateway" detail={decision.result?.gateway ?? (running ? 'verifying signature + exact arguments…' : 'signature + exact arguments · allowed')} done={!running} />
-        <TL icon="undo" tone={running ? 'muted' : ok ? 'ok' : 'bad'} title={`Ran ${decision.proposedAction.tool}`} detail={decision.result?.text ?? (running ? 'waiting…' : '')} done={!running} />
+        <TL icon="wrench" tone={running ? 'muted' : ok ? 'ok' : 'bad'} title={`Ran ${decision.proposedAction.tool}`} detail={decision.result?.text ?? (running ? 'waiting…' : '')} done={!running} />
         <TL icon="activity" tone={healthy && !running ? 'ok' : 'muted'} title={healthy && !running ? 'Healthy' : 'Waiting for the watcher to clear…'} detail={healthy && !running ? (incident?.resolvedAt ? `watcher cleared · ${clock(incident.resolvedAt)}` : 'live') : 'checking on every refresh, no model'} done={healthy && !running} last />
       </ol>
       {canSave && (
@@ -369,14 +369,12 @@ function useEvidence(wsId: string | undefined, panels: Panel[], pushed: Record<s
   useEffect(() => {
     if (!wsId || !panels.length || mode === 'fixture') return;
     const last: Record<string, number> = {};
-    const started = Date.now();
     const t = setInterval(() => {
       const now = Date.now();
       for (const p of panels) {
         const fromSocket = pushedRef.current[p.id];
         // Prefer socket pushes; fall back if none arrived within 3 s or they went quiet.
         if (fromSocket && now - new Date(fromSocket.at).getTime() < Math.max(5, p.refreshSec) * 2000) continue;
-        if (now - started < 3000 && mode === 'live') continue;
         if (now - (last[p.id] ?? 0) < Math.max(5, p.refreshSec || 10) * 1000) continue;
         last[p.id] = now;
         refreshPanel(wsId, p.id)

@@ -50,6 +50,13 @@ export function loadConnections() {
       url: gw && config.stripeViaGateway ? `${gw}/stripe` : 'https://mcp.stripe.com', sealedAuth: seal(`Bearer ${config.stripeKey}`),
       readPattern: '^(list_|retrieve_|search_|get_|fetch_)',
     });
+  // Nimble: live web context (search, extract, map, crawl) over its hosted MCP. Web results are untrusted data.
+  if (config.nimbleKey)
+    connections.set('nimble', {
+      id: 'nimble', name: 'Nimble (live web)', builtin: true, viaGateway: false,
+      url: 'https://mcp.nimbleway.com/mcp', sealedAuth: seal(`Bearer ${config.nimbleKey}`),
+      readPattern: '^nimble_(?!.*(create|delete|generate|update)).*$',
+    });
   for (const c of store.list<Connection>('connection')) connections.set(c.id, c);
 }
 

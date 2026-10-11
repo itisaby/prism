@@ -9,6 +9,7 @@ import { store } from './db.ts';
 import { callTool, isWriteTool, toolInfo, discover, getConnection } from './mcp.ts';
 import { emptyReceipt } from './llm.ts';
 import { latest, validatePanel } from './runtime.ts';
+import { span, toolSpan } from './telemetry.ts';
 import { canEdit, canView, getWorkspace } from './workspaces.ts';
 
 export class Forbidden extends Error {}
@@ -129,7 +130,11 @@ function resolveArgs(a: RecordAction, record: Record<string, unknown>, user: str
 // ---------------------------------------------------------------- approve / reject
 const inFlight = new Set<string>();
 
-export async function approve(id: string, user: string) {
+export function approve(id: string, user: string) {
+  return span('prism.approve', 'approve decision', { 'prism.decision': id, 'prism.approver': user }, () => approveInner(id, user));
+}
+
+async function approveInner(id: string, user: string) {
   const d = getDecision(id);
   if (!d) throw new BadRequest('unknown decision');
   const w = getWorkspace(d.workspaceId)!;
@@ -153,7 +158,7 @@ export async function approve(id: string, user: string) {
     const token = await signApproval({ user, decisionId: d.id, tool, args });
     const t0 = Date.now();
     try {
-      const res: any = await callTool(connectionId, tool, args, { user, allowWrite: true, approvalToken: token });
+      const res: any = await toolSpan(tool, connectionId, () => callTool(connectionId, tool, args, { user, allowWrite: true, approvalToken: token }));
       const changes: string[] = Array.isArray(res?.changes) ? res.changes : [];
       const gateway = config.gatewayUrl ? 'Checked at agentgateway: signature + exact arguments · allowed' : 'Direct (no gateway configured)';
       activity(d.workspaceId, 'gateway', `${tool} ran in ${Date.now() - t0} ms · ${gateway}`, { args });

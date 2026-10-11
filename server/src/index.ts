@@ -11,6 +11,7 @@ import { store } from './db.ts';
 import { BadRequest, Forbidden, approve, decisionFromRecordAction, getDecision, refreshEvidence, reject, savePlaybook } from './decisions.ts';
 import { investigate, onPanelRaw, resetWorkspace, setAutoInvestigate } from './incidents.ts';
 import { prismMcp } from './prism-mcp.ts';
+import { capture } from './telemetry.ts';
 import { addConnection, discover, listConnections, loadConnections, removeConnection, view } from './mcp.ts';
 import { getStats, latest, loadValidator, publicWorkspace, refreshPanel, scheduleAll, setRawListener } from './runtime.ts';
 import { Conflict, Invalid, applyOps, canEdit, canView, createWorkspace, getWorkspace, listWorkspaces, saveWorkspace } from './workspaces.ts';
@@ -24,6 +25,7 @@ app.onError((e, c) => {
   if (e instanceof BadRequest) return c.json({ error: e.message }, 400);
   if (e instanceof Forbidden) return c.json({ error: e.message }, 403);
   console.error(e);
+  capture(e, { path: c.req.path });
   return c.json({ error: (e as Error).message }, 500);
 });
 
@@ -143,7 +145,12 @@ app.post('/api/admin/auto-investigate', async c => {
   return c.json({ ok: true, on: !!on });
 });
 
+// The agent registry tab in "Add MCP" (agentregistry integration is production path; no suggestions today).
+app.get('/api/registry', c => c.json([]));
+
 // ---------------------------------------------------------------- boot
+process.on('unhandledRejection', e => { console.error('unhandled rejection (kept running):', e); capture(e); });
+process.on('uncaughtException', e => { console.error('uncaught exception (kept running):', e); capture(e); });
 await initApprovalKeys();
 await loadValidator();
 loadConnections();

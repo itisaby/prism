@@ -4,6 +4,7 @@ import type { Receipt } from '../../shared/types.ts';
 import { activity } from './bus.ts';
 import { config } from './config.ts';
 import { callTool, discover, getConnection, isWriteTool, listConnections } from './mcp.ts';
+import { agentSpan, toolSpan } from './telemetry.ts';
 
 const client = config.llmGatewayUrl
   ? new Anthropic({ baseURL: config.llmGatewayUrl, apiKey: 'held-by-agentgateway' })
@@ -50,7 +51,7 @@ export async function runReadTool(wsId: string, user: string, input: any) {
   if (!conn) return { error: `unknown connection ${input.connectionId}` };
   try {
     const t0 = Date.now();
-    const res = await callTool(conn.id, input.tool, input.args ?? {}, { user });
+    const res = await toolSpan(input.tool, conn.name, () => callTool(conn.id, input.tool, input.args ?? {}, { user }));
     activity(wsId, 'tool', `${conn.name} · ${input.tool} (read) · ${Date.now() - t0} ms`, { args: input.args });
     const text = JSON.stringify(res);
     return text.length > 12_000 ? text.slice(0, 12_000) + '…(truncated)' : text;
@@ -68,10 +69,16 @@ export interface LoopTool {
 
 export class AgentStopped extends Error {}
 
-export async function toolLoop(opts: {
+type LoopOpts = {
   wsId: string; user: string; label: string; system: string; stablePrefix: string; prompt: string;
   tools: LoopTool[]; maxTurns?: number; receipt: Receipt; transcript?: any[];
-}): Promise<unknown> {
+};
+
+export function toolLoop(opts: LoopOpts): Promise<unknown> {
+  return agentSpan(opts.label, config.model, opts.wsId, () => runLoop(opts));
+}
+
+async function runLoop(opts: LoopOpts): Promise<unknown> {
   if (!config.hasAnthropicKey) throw new AgentStopped('ANTHROPIC_API_KEY is not set in .env');
   const t0 = Date.now();
   const messages: any[] = opts.transcript ?? [];

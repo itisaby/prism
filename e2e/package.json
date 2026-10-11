@@ -1,0 +1,7 @@
+{
+  "name": "prism-e2e",
+  "private": true,
+  "type": "module",
+  "scripts": { "demo": "node demo.mjs" },
+  "devDependencies": { "playwright": "1.64.0" }
+}

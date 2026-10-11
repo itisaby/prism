@@ -8,6 +8,7 @@ import { AgentStopped, READ_TOOL, capabilitiesText, emptyReceipt, runReadTool, t
 import { CATALOG_GUIDE, INVESTIGATOR_SYSTEM } from './prompts.ts';
 import { addModelCost, evaluate, resetStats, validatePanel } from './runtime.ts';
 import { getWorkspace } from './workspaces.ts';
+import { capture, span } from './telemetry.ts';
 
 export let autoInvestigate = true;
 const clearCounts = new Map<string, number>(); // incident id → consecutive healthy evaluations
@@ -43,7 +44,7 @@ export async function onPanelRaw(w: Workspace, p: Panel, raw: unknown) {
     } catch (e) {
       continue; // a broken condition never opens incidents
     }
-    lastFindings.set(`${w.id}|${wt.id}`, new Set(findings.map(f => f.resource)));
+    lastFindings.set(`${w.id}|${wt.id}`, new Map(findings.map(f => [f.resource, f.reason])));
     const all = active(w.id);
     const open = all.filter(i => i.watcherId === wt.id);
     const failing = new Set(findings.map(f => `${w.id}|${wt.id}|${f.resource}`));
@@ -73,9 +74,9 @@ export async function onPanelRaw(w: Workspace, p: Panel, raw: unknown) {
   }
 }
 
-const lastFindings = new Map<string, Set<string>>(); // `${wsId}|${watcherId}` → resources failing at last evaluation
+const lastFindings = new Map<string, Map<string, string>>(); // `${wsId}|${watcherId}` → resource → reason at last evaluation
 function stillFailingElsewhere(wsId: string, watcherId: string, resource: string) {
-  for (const [k, set] of lastFindings) if (k.startsWith(wsId + '|') && k !== `${wsId}|${watcherId}` && set.has(resource)) return true;
+  for (const [k, m] of lastFindings) if (k.startsWith(wsId + '|') && k !== `${wsId}|${watcherId}` && m.has(resource)) return true;
   return false;
 }
 
@@ -87,9 +88,24 @@ function openIncident(w: Workspace, wt: Watcher, f: { resource: string; reason: 
   };
   saveIncident(i);
   activity(w.id, 'incident', `Incident #${i.number}: ${wt.title} · ${i.resource} · ${i.reason}`, { incidentId: i.id });
-  const pb = store.list<Playbook>('playbook', w.id).find(p => p.match.watcherId === wt.id && p.match.resource === i.resource && p.match.reason === i.reason);
-  if (pb) void replayPlaybook(i, pb);
-  else if (autoInvestigate) void investigate(i.id);
+  const pb = findPlaybook(w.id, i);
+  if (pb) return void replayPlaybook(i, pb);
+  // Other watchers may report the same failure a refresh later (e.g. pods vs deployment). Give them one cycle
+  // before paying for the model.
+  setTimeout(() => {
+    const fresh = store.get<Incident>('incident', i.id);
+    if (!fresh || fresh.status !== 'open' || fresh.decisionId) return;
+    const later = findPlaybook(w.id, fresh);
+    if (later) void replayPlaybook(fresh, later);
+    else if (autoInvestigate) void investigate(fresh.id);
+  }, 6000);
+}
+
+/** A playbook applies when the same resource shows the same failure, as reported by the incident or by any watcher right now. */
+function findPlaybook(wsId: string, i: Incident) {
+  return store.list<Playbook>('playbook', wsId).find(p => p.match.resource === i.resource && (
+    (p.match.watcherId === i.watcherId && p.match.reason === i.reason) ||
+    lastFindings.get(`${wsId}|${p.match.watcherId}`)?.get(i.resource) === p.match.reason));
 }
 
 function resolveIncident(i: Incident) {
@@ -104,13 +120,21 @@ function resolveIncident(i: Incident) {
 }
 
 // ---------------------------------------------------------------- playbook replay (0 model calls)
-async function replayPlaybook(i: Incident, pb: Playbook) {
+function replayPlaybook(i: Incident, pb: Playbook) {
+  // A replay is deliberately model-free: in Sentry this span has no gen_ai children.
+  return span('prism.playbook.replay', `replay playbook ${pb.title}`, {
+    'prism.incident': i.number, 'prism.resource': i.resource, 'prism.playbook': pb.id, 'gen_ai.model_calls': 0,
+  }, () => replayInner(i, pb));
+}
+
+async function replayInner(i: Incident, pb: Playbook) {
   const t0 = Date.now();
+  if (!store.get<Incident>('incident', i.id)) return;
   const w = getWorkspace(i.workspaceId)!;
   const suffix = randomUUID().slice(0, 4);
   const d = await createDecision({
     workspaceId: w.id, incidentId: i.id, title: pb.title,
-    summary: `Same as incident #${pb.origin.incidentNumber}: ${i.resource} hit ${i.reason}. The saved playbook proposes the fix that worked last time.`,
+    summary: `Same as incident #${pb.origin.incidentNumber}: ${i.resource} hit ${pb.match.reason} again. The saved playbook proposes the fix that worked last time.`,
     rationale: pb.rationale,
     evidence: pb.evidenceTemplate.map(p => ({ ...p, id: `${p.id}-${suffix}` })),
     proposedAction: pb.actionTemplate, source: 'playbook', playbookId: pb.id, receipt: emptyReceipt(),
@@ -203,12 +227,18 @@ export async function investigate(incidentId: string): Promise<Decision | undefi
       ],
     });
   } catch (e) {
+    if (!(e instanceof AgentStopped)) capture(e, { incident: i.id });
     activity(w.id, 'error', e instanceof AgentStopped ? e.message : `Investigator error: ${(e as Error).message}`);
   } finally {
     investigating.delete(i.id);
     store.put('agent-transcript', { id: i.id, transcript }, w.id);
     addModelCost(w.id, receipt.modelCalls, receipt.costUsd);
-    const fresh = store.get<Incident>('incident', i.id)!;
+    const fresh = store.get<Incident>('incident', i.id);
+    if (!fresh) {
+      // The incident was cleared (demo reset) while the agent worked: drop its decision too.
+      if (decision) store.delete('decision', decision.id);
+      return undefined;
+    }
     if (decision) {
       decision.receipt = receipt;
       saveDecision(decision);

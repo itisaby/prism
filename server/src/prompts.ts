@@ -26,6 +26,7 @@ binding = {connectionId, tool, args, transform}. tool must be a READ tool. trans
 JSON result and must return an object, e.g. {"rows": rows[reason != "Running"].{"name": name, "reason": reason}}.
 JSONata tips: filter with arr[cond]; map with arr.{...}; $count(arr); $sum(arr.x); string concat with &; conditional a ? b : c;
 wrap single results in [ ] when you need an array: {"rows": [rows[...]]}. Missing fields yield undefined (not errors).
+If a tool returns JSON as a string (e.g. web extract {"content": "{...}"}), parse it with $eval(content).
 
 # Record actions (write tools, always human-approved)
 actions = [{id, label, connectionId, tool, recordKey, args: {argName: {"record":"field"} | {"value": literal} | {"user": true}}, when?: {key, equals}}]
@@ -44,7 +45,8 @@ ContainerCreating, Pending or Terminating. Prefer one watcher per root cause; PR
 
 # Layout
 12-column grid. layout {x,y,w,h}; h is in rows of ~60px (h 4–6 for tables/charts, 2 for metric rows).
-refreshSec: 5–10 for health/status panels, 15–30 for usage charts.
+refreshSec: 5–10 for health/status panels, 15–30 for usage charts. Live-web tools (nimble_*) cost per call: refreshSec ≥ 120,
+prefer a page's JSON endpoint (e.g. a statuspage.io site's /api/v2/summary.json) over HTML.
 `;
 
 export const COMPOSER_SYSTEM = `You are PRISM's interface composer. People describe the workspace they want; you compose it from the

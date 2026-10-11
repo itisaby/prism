@@ -10,3 +10,4 @@ server/keys/
 *.db
 *.db-*
 .DS_Store
+e2e/screenshots/

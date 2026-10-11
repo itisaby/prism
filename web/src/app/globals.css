@@ -605,3 +605,9 @@ a.banner:hover { filter: brightness(1.15); }
 .pc-metric-value { font-size: 23px; line-height: 1.2; }
 .panel { padding: 12px 16px 14px; gap: 10px; }
 .pc-metric-hint { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 860px) {
+  .landing .jelly, .landing .ring, .landing .capsule, .landing .ball-wrap, .landing .bubble, .landing svg.deco:not(.twinkle) { display: none; }
+  .land-nav .btn { max-width: 200px; overflow: hidden; text-overflow: ellipsis; display: inline-block; line-height: 30px; }
+  .headline { font-size: 44px; }
+  .via { text-align: center; justify-content: center; flex-wrap: wrap; padding: 0 8px; }
+}

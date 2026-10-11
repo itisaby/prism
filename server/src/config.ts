@@ -28,6 +28,7 @@ export const config = {
   githubToken: process.env.GITHUB_TOKEN || '',
   stripeKey: process.env.STRIPE_SECRET_KEY || '',
   stripeViaGateway: process.env.STRIPE_VIA_GATEWAY === '1',
+  nimbleKey: process.env.NIMBLE_API_KEY || '',
   // USD per million tokens (estimate; override if pricing differs).
   price: {
     input: num(process.env.PRISM_PRICE_INPUT, 5),
