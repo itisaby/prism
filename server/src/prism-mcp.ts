@@ -8,7 +8,7 @@ import { store } from './db.ts';
 import { createDecision, validateAction } from './decisions.ts';
 import { capabilitiesText, emptyReceipt } from './llm.ts';
 import { validatePanel } from './runtime.ts';
-import { Invalid, applyOps, canEdit, canView, getWorkspace, listWorkspaces } from './workspaces.ts';
+import { Invalid, applyOps, canEdit, canView, getWorkspace, listWorkspaces, normUser } from './workspaces.ts';
 
 const ok = (data: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }], structuredContent: data as Record<string, unknown> });
 const err = (text: string) => ({ content: [{ type: 'text' as const, text }], isError: true });
@@ -90,7 +90,7 @@ function build(user: string, agent: string) {
 
 export const prismMcp = createMcpHandler(ctx => {
   const h = ctx.requestInfo?.headers;
-  const user = (h?.get('x-prism-user') || 'arnab').toLowerCase();
+  const user = normUser(h?.get('x-prism-user'));
   const agent = h?.get('x-prism-agent') || 'Claude Code';
   return build(user, agent);
 });

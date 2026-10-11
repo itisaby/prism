@@ -15,7 +15,9 @@ export function createWorkspace(owner: string, title = 'Untitled workspace'): Wo
 }
 
 export const getWorkspace = (id: string) => store.get<Workspace>('workspace', id);
-export const canView = (w: Workspace, user: string) => w.owner === user || w.members.includes(user) || user === 'judge';
+export const canView = (w: Workspace, user: string) => w.owner === user || w.members.includes(user) || user === 'lead';
+/** Identity from a header or `?as=`; "judge" is the old name of the approver identity "lead". */
+export const normUser = (u?: string | null) => { const x = (u || 'arnab').toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 32) || 'arnab'; return x === 'judge' ? 'lead' : x; };
 export const canEdit = (w: Workspace, user: string) => w.owner === user;
 // Most recently active first (the store lists by last update, oldest first).
 export const listWorkspaces = (user: string) =>

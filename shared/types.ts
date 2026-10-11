@@ -1,6 +1,6 @@
 // PRISM shared contracts. Imported by server/ and web/ (type-only; no runtime deps).
 
-export type User = string; // identity header value, e.g. "arnab", "judge"
+export type User = string; // identity header value, e.g. "arnab", "lead"
 
 export interface DiscoveredTool {
   name: string;
@@ -89,7 +89,7 @@ export interface Workspace {
   version: number;
   panels: Panel[];
   watchers: Watcher[];
-  members: User[];        // can view + approve (e.g. "judge")
+  members: User[];        // can view + approve (e.g. "lead")
   buildReceipt?: Receipt; // what the initial composition cost
   /** Set on what a non-owner receives: their personal view of the shared workspace. */
   personal?: { viewer: User; customizedPanels: string[]; hiddenPanels: { id: string; title: string }[] };

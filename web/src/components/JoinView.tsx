@@ -13,12 +13,12 @@ import { cap, clock, timeAgo } from '../lib/format.ts';
 import type { Decision } from '../lib/types.ts';
 import { useNow, useWorkspaceSocket, useFixtureSuffix } from '../lib/useWorkspaceSocket.ts';
 
-/** The judge's phone: join one workspace as an approver. */
+/** The lead's phone: join one workspace as an approver. */
 export function JoinView({ wsId }: { wsId: string }) {
   const [user, setReadyUser] = useState<string | null>(null);
   useEffect(() => {
     const as = new URLSearchParams(window.location.search).get('as');
-    const u = as || 'judge';
+    const u = as && as.toLowerCase() !== 'judge' ? as : 'lead';
     setUser(u);
     setReadyUser(u);
   }, []);

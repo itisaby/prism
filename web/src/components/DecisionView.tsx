@@ -262,7 +262,7 @@ export function DecisionView({ id }: { id: string }) {
 }
 
 function DecideNav({ q, user, title, wsId, mode }: { q: string; user: string; title?: string; wsId?: string; mode?: 'connecting' | 'live' | 'polling' | 'fixture' }) {
-  const back = wsId ? (user === 'judge' ? `/j/${wsId}${q}` : `/w/${wsId}${q}`) : `/${q}`;
+  const back = wsId ? (user === 'lead' ? `/j/${wsId}${q}` : `/w/${wsId}${q}`) : `/${q}`;
   return (
     <nav className="decide-nav">
       <Link href={back} className="back"><Icon name="chevron-left" size={18} /><span className="ellipsis">{title ?? 'Back'}</span></Link>

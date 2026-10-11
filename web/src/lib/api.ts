@@ -1,7 +1,7 @@
 // Fetch wrapper for the PRISM API: adds the identity header, routes to fixtures in demo mode.
 import { fixtureRequest } from './fixtures.ts';
 
-export const USERS = ['arnab', 'judge'] as const;
+export const USERS = ['arnab', 'lead'] as const;
 const USER_KEY = 'prism.user';
 const DEFAULT_USER = 'arnab';
 
@@ -17,13 +17,18 @@ export function currentUser(): string {
   if (typeof window === 'undefined') return DEFAULT_USER;
   const fromUrl = new URLSearchParams(window.location.search).get('as');
   if (fromUrl && /^[a-z0-9_-]{1,32}$/i.test(fromUrl)) {
-    safeSet(USER_KEY, fromUrl);
-    return fromUrl;
+    const u = legacy(fromUrl);
+    safeSet(USER_KEY, u);
+    return u;
   }
-  return safeGet(USER_KEY) || DEFAULT_USER;
+  return legacy(safeGet(USER_KEY) || DEFAULT_USER);
 }
 
+// "judge" was the old name of the approver identity.
+const legacy = (u: string) => (u.toLowerCase() === 'judge' ? 'lead' : u);
+
 export function setUser(user: string) {
+  user = legacy(user);
   safeSet(USER_KEY, user);
   window.dispatchEvent(new CustomEvent('prism:user', { detail: user }));
 }

@@ -154,15 +154,15 @@ if (!skipAgent) {
   });
 }
 
-// ------------------------------------------------------------------ 5 incident #2: playbook replay on the judge's phone
+// ------------------------------------------------------------------ 5 incident #2: playbook replay on the lead's phone
 const phone = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
-await phone.addInitScript(() => localStorage.setItem('prism.user', 'judge'));
+await phone.addInitScript(() => localStorage.setItem('prism.user', 'lead'));
 const mobile = await phone.newPage();
 const mobileErrors = watch(mobile, 'phone');
 
 await step('Judge joins on a phone', async () => {
   sh('./scripts/reset.sh');
-  await mobile.goto(`${WEB}/j/${K8S}?as=judge`, { waitUntil: 'domcontentloaded' });
+  await mobile.goto(`${WEB}/j/${K8S}?as=lead`, { waitUntil: 'domcontentloaded' });
   await mobile.waitForTimeout(3000);
   await mobile.screenshot({ path: SHOTS + '12-phone-join.png' });
 });
@@ -180,14 +180,14 @@ await step('Break #2: playbook replay reaches the phone with 0 model calls', asy
   await waitFor(async () => (await mobile.getByText('Loading…').count()) === 0, 15000, 500); // live evidence arrived
   await mobile.screenshot({ path: SHOTS + '14-phone-replay.png', fullPage: true });
   const id = mobile.url().split('/decide/')[1].split('?')[0];
-  const d = (await api(`/decisions/${id}`, 'judge')).decision;
+  const d = (await api(`/decisions/${id}`, 'lead')).decision;
   return `on phone ${secs}s after the break · source ${d.source} · matched in ${d.matchMs} ms · ${d.receipt.modelCalls} model calls`;
 });
 
 await step('Judge holds to approve on the phone; gateway allows; cluster heals', async () => {
   const id = mobile.url().split('/decide/')[1].split('?')[0];
   await hold(mobile, mobile.getByText('Hold to approve').first());
-  const d = await waitFor(async () => { const r = (await api(`/decisions/${id}`, 'judge')).decision; return ['executed', 'failed'].includes(r.status) && r; }, 40000);
+  const d = await waitFor(async () => { const r = (await api(`/decisions/${id}`, 'lead')).decision; return ['executed', 'failed'].includes(r.status) && r; }, 40000);
   if (d.status !== 'executed') throw new Error(`decision ${d.status}: ${d.result?.text}`);
   await waitFor(async () => (await api(`/workspaces/${K8S}`)).incidents.every(i => i.status === 'resolved'), 60000);
   await mobile.screenshot({ path: SHOTS + '15-phone-done.png', fullPage: true });

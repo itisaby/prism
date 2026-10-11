@@ -132,7 +132,7 @@ const PLAYBOOK: Playbook = {
     label: 'Roll back checkout-worker to the last working image', consequences: [],
   },
   rationale: 'New pods cannot pull the image; the previous revision ran cleanly.',
-  origin: { incidentId: 'inc-1', incidentNumber: 1, savedBy: 'arnab', approvedBy: 'judge', at: iso(26 * 60_000),
+  origin: { incidentId: 'inc-1', incidentNumber: 1, savedBy: 'arnab', approvedBy: 'lead', at: iso(26 * 60_000),
     receipt: { modelCalls: 3, inputTokens: 18_400, outputTokens: 2_100, cacheReadTokens: 9_800, costUsd: 0.11, ms: 21_400 } },
   uses: 2,
 };
@@ -149,7 +149,7 @@ function seedWorld(): World {
   const now = Date.now();
   const cpu = Array.from({ length: 24 }, (_, i) => cpuPoint(new Date(now - (23 - i) * 10_000), i));
   const workspace: Workspace = {
-    id: 'demo', owner: 'arnab', title: 'Shop cluster', version: 7, members: ['judge'],
+    id: 'demo', owner: 'arnab', title: 'Shop cluster', version: 7, members: ['lead'],
     panels: clone(PANELS),
     watchers: [{ id: 'w-pods', panelId: 'p-pods', title: 'Pods failing to start', severity: 'critical',
       condition: 'pods[status != "Running"].{ "resource": namespace & "/" & deployment, "reason": reason }' }],
@@ -176,7 +176,7 @@ function seedWorld(): World {
   const act = (kind: ActivityKind, text: string, ago: number): Activity => ({ id: nextId('a'), workspaceId: 'demo', at: iso(ago), kind, text });
   return {
     broken: true, workspace, cpu, helpOpen: 7,
-    events: { id: 'events', owner: 'arnab', title: 'Hackathon ops', version: 3, members: ['judge'], panels: clone(EVENT_PANELS),
+    events: { id: 'events', owner: 'arnab', title: 'Hackathon ops', version: 3, members: ['lead'], panels: clone(EVENT_PANELS),
       watchers: [{ id: 'w-help', panelId: 'e-help', title: 'Help request waiting over 20 min', severity: 'warning', condition: 'requests[waitingMin > 20]' }],
       buildReceipt: { modelCalls: 3, inputTokens: 22_000, outputTokens: 2_600, cacheReadTokens: 8_000, costUsd: 0.12, ms: 19_800 } },
     eventStats: { refreshes: 412, modelCalls: 3, costUsd: 0.12 },
@@ -200,7 +200,7 @@ function seedWorld(): World {
       act('playbook', 'Playbook “Roll back a bad image” matched in 812 ms · 0 model calls', 47_000),
       act('incident', 'Incident #2 opened · shop/checkout-worker · ImagePullBackOff', 48_000),
       act('refresh', 'Refreshed 4 panels · 0 model calls', 50_000),
-      act('gateway', 'agentgateway allowed rollback_deployment (signed by judge)', 26 * 60_000),
+      act('gateway', 'agentgateway allowed rollback_deployment (signed by lead)', 26 * 60_000),
       act('validate', 'Validated 4 panels against the PRISM catalog', 60 * 60_000),
       act('tool', 'list_pods {"namespace":"shop"} → 16 pods', 61 * 60_000),
       act('model', 'claude-opus-5-5 composed the workspace · 4 calls · $0.18', 62 * 60_000),

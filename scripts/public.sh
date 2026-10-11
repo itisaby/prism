@@ -23,4 +23,4 @@ done
 [[ -n "${URL:-}" ]] || { echo "tunnel did not come up; see data/tunnel.log"; exit 1; }
 echo "$URL" > data/public-url
 echo "PRISM public demo: $URL"
-echo "Judge link for a workspace: $URL/j/<workspace-id>?as=judge   (Share → QR in the app uses the page origin)"
+echo "Lead link for a workspace: $URL/j/<workspace-id>?as=lead   (Share → QR in the app uses the page origin)"

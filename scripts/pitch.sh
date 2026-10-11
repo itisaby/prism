@@ -2,6 +2,6 @@
 # Serve the voice-following pitch on localhost (the mic needs localhost or https) and open it.
 set -euo pipefail
 cd "$(dirname "$0")/../docs/pitch"
-PORT="${PORT:-8090}"
+PORT="${PORT:-8099}"  # 8090 is the public proxy
 (sleep 1; open "http://localhost:$PORT/") &
 exec python3 -m http.server "$PORT" --bind 127.0.0.1

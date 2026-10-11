@@ -17,10 +17,10 @@ import { searchRegistry } from './registry.ts';
 import { RESEARCH_CONNECTION, RESEARCH_TOOL } from './research.ts';
 import { addConnection, discover, listConnections, loadConnections, removeConnection, view } from './mcp.ts';
 import { getStats, latest, loadValidator, publicWorkspace, refreshPanel, scheduleAll, setPanelDataEmitter, setRawListener } from './runtime.ts';
-import { Conflict, Invalid, applyOps, canEdit, canView, createWorkspace, deleteWorkspace, getWorkspace, listWorkspaces, saveWorkspace, setWorkspaceEmitter } from './workspaces.ts';
+import { Conflict, Invalid, applyOps, canEdit, canView, createWorkspace, deleteWorkspace, getWorkspace, listWorkspaces, normUser, saveWorkspace, setWorkspaceEmitter } from './workspaces.ts';
 
 const app = new Hono();
-const userOf = (c: Context) => (c.req.header('x-prism-user') || c.req.query('as') || 'arnab').toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 32) || 'arnab';
+const userOf = (c: Context) => normUser(c.req.header('x-prism-user') || c.req.query('as'));
 
 app.onError((e, c) => {
   if (e instanceof Conflict) return c.json({ error: e.message }, 409);
@@ -213,7 +213,7 @@ const wss = new WebSocketServer({ noServer: true });
   const url = new URL(req.url, 'http://x');
   if (url.pathname !== '/ws') return socket.destroy();
   const wsId = url.searchParams.get('ws') ?? '';
-  const user = (url.searchParams.get('as') || 'arnab').toLowerCase();
+  const user = normUser(url.searchParams.get('as'));
   const w = getWorkspace(wsId);
   if (!w || !canView(w, user)) return socket.destroy();
   wss.handleUpgrade(req, socket, head, sock => {

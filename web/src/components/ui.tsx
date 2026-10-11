@@ -139,7 +139,7 @@ export function QrModal({ open, onClose, url, title }: { open: boolean; onClose:
         <button className="btn btn-ghost btn-sm" onClick={copy}><Icon name={copied ? 'check' : 'copy'} size={14} />{copied ? 'Copied' : 'Copy link'}</button>
         <ul className="facts">
           <li><Icon name="phone" size={15} />Opens in the browser, nothing to install</li>
-          <li><Icon name="user-check" size={15} />Joins as Judge, sees only {title}</li>
+          <li><Icon name="user-check" size={15} />Joins as Lead, sees only {title}</li>
           <li><Icon name="key" size={15} />Each approval is signed for that person</li>
         </ul>
       </div>
@@ -152,7 +152,7 @@ export function IdentitySwitch({ user }: { user: string }) {
     <div className="identity">
       <span className="avatar">{user.slice(0, 1).toUpperCase()}</span>
       <div className="identity-who">
-        <span className="identity-name">{user === 'arnab' ? 'Arnab' : user === 'judge' ? 'Judge' : user}</span>
+        <span className="identity-name">{user === 'arnab' ? 'Arnab' : user === 'lead' ? 'Lead' : user}</span>
         <span className="mono identity-role">{user === 'arnab' ? 'owner' : 'approver'}</span>
       </div>
       <div className="seg" role="group" aria-label="Switch identity">

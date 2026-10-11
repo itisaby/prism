@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>PRISM Pitch</title>
+<title>PRISM — the workspace layer for MCP</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -184,7 +184,8 @@ button,input{font:inherit;color:inherit}
 .hero .mark{width:120px;height:120px;filter:drop-shadow(0 0 40px rgba(124,92,255,.5));animation:float 6s ease-in-out infinite}
 @keyframes float{50%{transform:translateY(-10px) rotate(3deg)}}
 .hero h2{margin:26px 0 6px;font-size:150px;line-height:1;letter-spacing:-.05em;font-weight:800;background:linear-gradient(180deg,#fff 30%,#8f8f9a);-webkit-background-clip:text;background-clip:text;color:transparent}
-.hero .tl{font-size:40px;font-weight:600;letter-spacing:-.02em;line-height:1.3;color:var(--ink-2)}
+.hero .subt{font-size:46px;font-weight:600;letter-spacing:-.025em;color:var(--ink);margin-top:4px}
+.hero .tl{margin-top:22px;font-size:28px;font-weight:600;letter-spacing:-.02em;line-height:1.3;color:var(--ink-2)}
 .hero .tl span{background:linear-gradient(90deg,var(--violet),var(--pink),var(--amber),var(--cyan));-webkit-background-clip:text;background-clip:text;color:transparent}
 .hero .url{margin-top:34px;font:500 22px var(--mono);color:var(--cyan);padding:12px 20px;border:1px solid rgba(46,230,214,.35);border-radius:12px;background:rgba(46,230,214,.06)}
 .hero .meta{margin-top:30px;font:500 14px var(--mono);color:var(--muted);letter-spacing:2px}
@@ -231,6 +232,14 @@ body.presenter #presenter{display:block}
 .pz-list button.cur{border-color:var(--cyan);color:var(--ink)}
 .pz-set{margin-top:18px;display:flex;gap:10px;align-items:center;color:var(--muted);font-size:13px}
 .pz-set input{flex:1;max-width:520px;background:#101018;border:1px solid var(--line-2);border-radius:8px;padding:8px 10px}
+/* poster: one static, complete architecture view (?poster) */
+body.poster .copy{top:58px}
+body.poster #h{font-size:46px;letter-spacing:-.03em}
+body.poster #pts{margin-top:14px;gap:10px}
+body.poster #pts li{height:36px;font-size:16px;padding:0 14px 0 10px}
+body.poster #pts li b{width:12px;height:12px;font-size:0}
+body.poster .top,body.poster .foot{display:none}
+body.poster #area{top:196px;height:690px}
 @media (prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important}}
 </style>
 </head>
@@ -416,9 +425,10 @@ body.presenter #presenter{display:block}
   <div class="hero" id="hero">
     <svg class="mark"><use href="#lg-prism"/></svg>
     <h2 id="heroH">PRISM</h2>
-    <div class="tl">The harness <span>learns.</span><br>The model <span>rests.</span></div>
+    <div class="subt" id="heroSub">the workspace layer for MCP.</div>
+    <div class="tl">The harness <span>learns.</span> The model <span>rests.</span></div>
     <div class="url" id="heroUrl" style="display:none"></div>
-    <div class="meta" id="heroMeta">AN AGENT HARNESS FOR MCP</div>
+    <div class="meta" id="heroMeta"></div>
   </div>
 
   <div class="foot"><div class="ticker" id="ticker"></div><div class="segs" id="segs"></div></div>
@@ -605,7 +615,7 @@ edge('runtime-web', 'M580,192 C545,192 530,232 500,232');
 }
 edge('playbooks-dec', 'M580,352 C540,352 540,430 500,430');
 edge('dec-approvals', 'M500,478 C545,478 540,408 580,408');
-node('n:phone', 30, 410, 180, 64, { logo: 'lg-phone', label: 'Phone', sub: 'judge · approver' });
+node('n:phone', 30, 410, 180, 64, { logo: 'lg-phone', label: 'Phone', sub: 'approver' });
 {
   const h = el('g', { class: 'hold' }, el('g', { 'data-k': 'n:phone' }, layerFx));
   el('circle', { cx: 52, cy: 442, r: 20, fill: 'none', stroke: 'rgba(255,255,255,.15)', 'stroke-width': 3 }, h);
@@ -675,14 +685,14 @@ const refreshFlows = (gap = 1700) => {
 };
 const STEPS = [
   { id: 'title', hero: 'title', h: 'PRISM', pts: [],
-    say: "Hi, I'm Arnab, and this is PRISM.", cues: [] , secs: 4 },
+    say: "Hi, I'm Arnab, and this is PRISM, the workspace layer for MCP. It turns your team's MCP servers into one live workspace. An agent builds it once, it runs without the model, and when something needs a person, it hands you a decision instead of a paragraph. It works today: open standards, cheaper with every use, and no write without a signed human approval.", cues: [], secs: 25 },
 
   { id: 'gap', h: 'The Harness', overlay: 'harness',
-    pts: [{ t: 'Model every loop' }, { t: 'Paragraphs to humans', cue: ['paragraph'], after: 3800 },
-          { t: 'PRISM compiles once', cue: ['changes the harness', 'figures it out', 'compiles'], after: 10500, fx: () => harnessNew(true) }],
+    pts: [{ t: 'Model every loop' }, { t: 'Paragraphs to humans', cue: ['paragraph'], after: 2600 },
+          { t: 'PRISM compiles once', cue: ['compiles', 'prism compiles'], after: 6000, fx: () => harnessNew(true) }],
     run: () => harnessNew(false),
-    say: "Today's agent harness puts the model in every loop: model, MCP tools, then a paragraph for a human. Every repeat costs the same again. PRISM changes the harness: the model figures it out once, and PRISM compiles that into something that runs without it.",
-    cues: ['todays agent', 'harness puts', 'every loop'], secs: 15 },
+    say: "Today the model runs every loop and sends you a paragraph, at full price every time. PRISM compiles it once.",
+    cues: ['today the model', 'runs every loop', 'every loop'], secs: 7 },
 
   { id: 'tools', h: 'Your Tools', cam: { x: 1295, y: 350, z: 1.15 }, show: ['n:registry'],
     pts: [{ t: 'Any MCP server' }, { t: 'Live web: Nimble', cue: ['nimble', 'live web'], show: ['n:nimble'] }, { t: 'Cataloged in agentregistry', cue: ['registry', 'catalog'] }],
@@ -690,7 +700,7 @@ const STEPS = [
       { cue: ['kubernetes'], after: 300, show: ['n:k8s'] }, { cue: ['event'], after: 900, show: ['n:event'] }, { cue: ['github'], after: 1500, show: ['n:github'] },
       { cue: ['stripe'], after: 2100, show: ['n:stripe'] }, { cue: ['sentry'], after: 2700, show: ['n:sentrysrc'] }, { after: 3300, show: ['n:nimble'] },
     ],
-    say: 'PRISM sits on the MCP servers you already have: Kubernetes, our event database, GitHub, Stripe, Sentry, and Nimble for the live web, all cataloged in agentregistry.',
+    say: 'PRISM sits on the MCP servers you already have: Kubernetes, our event database, GitHub, Stripe, Sentry, and Nimble, all cataloged in agentregistry.',
     cues: ['sits on', 'servers you already', 'already have'], secs: 10 },
 
   { id: 'gateway', h: 'One Gateway', cam: { x: 1175, y: 300, z: 1.12 },
@@ -705,14 +715,14 @@ const STEPS = [
     hot: ['n:you', 'n:web', 'n:prism', 'c:composer', 'c:runtime', 'e:you-web', 'e:web-composer', 'e:composer-llm', 'e:runtime-mcp', 'e:runtime-web', 'n:gw', 'n:model', 'e:llm-model', 'e:mcp-k8s', 'n:k8s', 'e:mcpbadge'],
     pts: [{ t: 'Live A2UI workspace', cue: ['workspace', 'a2ui'] }, { t: 'Built once', cue: ['once', 'builds'] }, { t: 'Validated by running', cue: ['running', 'checks'] }],
     run: () => { flow(['you-web', 'web-composer', 'composer-llm', 'llm-model'], C.model, { gap: 2400 }); flow(['runtime-mcp', 'mcp-k8s'], C.data, { gap: 2400, delay: 1200 }); },
-    say: 'I describe what I need in one sentence. Claude builds a live A2UI workspace once, and PRISM checks every panel by running it.',
+    say: 'One sentence, and Claude builds a live A2UI workspace once. PRISM checks every panel by running it.',
     cues: ['one sentence', 'describe what i need', 'describe what'], secs: 10 },
 
   { id: 'refresh', h: 'Model Rests', cam: { x: 760, y: 320, z: 1.0 }, rest: true,
     hot: ['n:web', 'n:prism', 'c:runtime', 'e:runtime-web', 'e:runtime-mcp', 'n:gw', 'e:mcpbadge', 'n:model', ...SRC_ALL.flatMap(s => ['n:' + s, 'e:mcp-' + s])],
-    pts: [{ t: 'Saved bindings' }, { t: 'JSONata transforms', cue: ['jsonata', 'transform'] }, { t: 'Zero model calls', cue: ['model rests', 'straight from', 'no model'] }],
+    pts: [{ t: 'Saved bindings' }, { t: 'JSONata transforms', cue: ['jsonata', 'refresh', 'straight from'] }, { t: 'Zero model calls', cue: ['model rests', 'straight from', 'no model'] }],
     run: () => refreshFlows(),
-    say: 'After that, each panel is a saved binding with a JSONata transform. It refreshes straight from the tools. The model rests.',
+    say: 'After that, panels are saved bindings that refresh straight from the tools. The model rests.',
     cues: ['binding', 'after that', 'saved binding'], secs: 9 },
 
   { id: 'watch', h: 'Watchers', cam: { x: 820, y: 300, z: 1.1 }, rest: true,
@@ -735,7 +745,7 @@ const STEPS = [
       flow(['agent-mcp', 'mcp-sentrysrc'], C.data, { gap: 2600, delay: 1200 });
       flow(['nimble'], C.approve, { gap: 2600, delay: 1800 });
     },
-    say: 'This one is new, so the agent wakes up. It investigates with read-only tools, proposes one fix, and stops. Waiting costs nothing.',
+    say: 'This one is new, so the agent wakes up. It investigates with read-only tools, proposes one fix, and stops.',
     cues: ['wakes', 'wake up', 'this one is new', 'is new'], secs: 10 },
 
   { id: 'decision', h: 'Decision Surface', overlay: 'decision', cam: { x: 760, y: 330, z: 1.0 }, rest: true, flags: ['broken', 'dec'],
@@ -796,7 +806,7 @@ const STEPS = [
 
   { id: 'close', hero: 'close', h: 'Live Demo', pts: [], rest: true,
     run: () => { refreshFlows(2200); },
-    say: "That's PRISM. The harness learns, the model rests. Let me show you.",
+    say: "That's PRISM. Let me show you.",
     cues: ['thats prism', 'let me show', 'show you'], secs: 4 },
 ];
 const TOTAL_SECS = 120;
@@ -853,7 +863,8 @@ function render() {
   $('heroH').textContent = s.hero === 'close' ? 'Live Demo' : 'PRISM';
   $('heroUrl').style.display = s.hero === 'close' ? '' : 'none';
   $('heroUrl').textContent = demoUrl.replace(/^https?:\/\//, '');
-  $('heroMeta').textContent = s.hero === 'close' ? 'THE HARNESS LEARNS · THE MODEL RESTS' : 'AN AGENT HARNESS FOR MCP';
+  $('heroMeta').textContent = s.hero === 'close' ? 'PRISM · THE WORKSPACE LAYER FOR MCP' : '';
+  $('heroSub').style.display = s.hero === 'close' ? 'none' : '';
   $('hero').querySelector('.tl').style.display = s.hero === 'close' ? 'none' : '';
   // copy
   const h = $('h'); h.textContent = s.h; h.classList.remove('swap'); void h.offsetWidth; h.classList.add('swap');
@@ -1000,10 +1011,29 @@ $('pzUrl').addEventListener('change', e => { demoUrl = e.target.value.trim(); st
 
 function fit() { const s = Math.min(innerWidth / 1600, innerHeight / 900); $('stage').style.transform = `scale(${s})`; }
 addEventListener('resize', fit); fit();
-if (isPresenter) { document.body.classList.add('presenter'); document.title = 'PRISM Pitch · presenter'; }
+if (isPresenter) { document.body.classList.add('presenter'); document.title = 'PRISM — presenter'; }
+const isPoster = new URLSearchParams(location.search).has('poster');
+function renderPoster() {
+  document.body.classList.add('poster');
+  const all = new Set(); for (const p of STEPS) { (p.show || []).forEach(k => all.add(k)); (p.beats || []).forEach(b => (b.show || []).forEach(k => all.add(k))); (p.pts || []).forEach(pt => (pt.show || []).forEach(k => all.add(k))); }
+  all.delete('n:forged'); all.delete('e:forged');
+  show([...all]);
+  $('h').textContent = 'PRISM — the workspace layer for MCP';
+  const legend = [['var(--cyan)', 'Tool data · no model'], ['#a48bff', 'Model calls · only when new'], ['var(--amber)', 'Signed approvals'], ['var(--pink)', 'Telemetry']];
+  $('pts').innerHTML = legend.map(([c, t]) => `<li class="on" style="--c:${c}"><b></b>${t}</li>`).join('');
+  cam = [0, 36, 1410, 652]; dg.setAttribute('viewBox', cam.join(' '));
+  refreshFlows(1500);
+  flow(['you-web', 'web-composer', 'composer-llm', 'llm-model'], C.model, { gap: 2600 });
+  flow(['agent-mcp', 'mcp-sentrysrc'], C.data, { gap: 2200, delay: 700 });
+  flow(['nimble'], C.data, { gap: 2400, delay: 300 });
+  flow(['phone-dec', 'dec-approvals', 'approvals-mcp', 'mcp-k8s'], C.approve, { gap: 2600, delay: 900 });
+  flow(['prism-sentry'], C.tele, { gap: 1800 }); flow(['gw-otel', 'otel-sentry'], C.tele, { gap: 2000, delay: 500 }); flow(['gw-otel', 'otel-jaeger'], C.tele, { gap: 2000, delay: 1400 });
+  flow(['playbooks-dec'], C.ok, { gap: 2400, delay: 1200 });
+}
 const start = parseInt(new URLSearchParams(location.search).get('step') || '1', 10) - 1;
-cur = Math.max(0, Math.min(STEPS.length - 1, start)); go(cur, 'init');
-if (!isPresenter) setTimeout(() => toast('→ / clicker to advance · L voice follow · P presenter view · ? help'), 600);
+cur = Math.max(0, Math.min(STEPS.length - 1, start));
+if (isPoster) renderPoster(); else go(cur, 'init');
+if (!isPresenter && !isPoster) setTimeout(() => toast('→ / clicker to advance · L voice follow · P presenter view · ? help'), 600);
 </script>
 </body>
 </html>

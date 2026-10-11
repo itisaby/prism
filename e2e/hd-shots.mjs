@@ -16,7 +16,7 @@ const browser = await chromium.launch({ channel: 'chrome' });
 const desk = await (await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2 })).newPage();
 await desk.addInitScript(() => localStorage.setItem('prism.user', 'arnab'));
 const phoneCtx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
-await phoneCtx.addInitScript(() => localStorage.setItem('prism.user', 'judge'));
+await phoneCtx.addInitScript(() => localStorage.setItem('prism.user', 'lead'));
 const phone = await phoneCtx.newPage();
 
 await api('/admin/auto-investigate', { method: 'POST', body: JSON.stringify({ on: false }) });
@@ -38,19 +38,19 @@ try {
   const d1 = await until(async () => (await api(`/workspaces/${SHOP}`)).decisions.find(d => d.status === 'pending' && d.source === 'agent'), 120000);
   await desk.goto(`${WEB}/decide/${d1.id}`); await sleep(5000); await shot(desk, '5-agent-decision');
   // approve on the phone, save playbook
-  await phone.goto(`${WEB}/decide/${d1.id}?as=judge`); await sleep(4000);
+  await phone.goto(`${WEB}/decide/${d1.id}?as=lead`); await sleep(4000);
   await hold(phone, phone.getByText('Hold to approve').first());
   await until(async () => (await api(`/decisions/${d1.id}`)).decision.status === 'executed', 40000);
   await api(`/decisions/${d1.id}/playbook`, { method: 'POST' });
   await until(async () => (await api(`/workspaces/${SHOP}`)).incidents.every(i => i.status === 'resolved'), 90000);
   // 6 second break → playbook replay on the phone
   sh('./scripts/reset.sh'); await sleep(2000);
-  await phone.goto(`${WEB}/j/${SHOP}?as=judge`); await sleep(3000);
+  await phone.goto(`${WEB}/j/${SHOP}?as=lead`); await sleep(3000);
   sh('./scripts/break.sh');
   await phone.getByText('Approval needed').first().waitFor({ timeout: 60000 });
   await sleep(1500); await shot(phone, '6-phone-approval');
   const d2 = (await api(`/workspaces/${SHOP}`)).decisions.find(d => d.status === 'pending' && d.source === 'playbook');
-  await phone.goto(`${WEB}/decide/${d2.id}?as=judge`); await sleep(4500); await shot(phone, '7-phone-replay');
+  await phone.goto(`${WEB}/decide/${d2.id}?as=lead`); await sleep(4500); await shot(phone, '7-phone-replay');
   await desk.goto(`${WEB}/decide/${d2.id}`); await sleep(4500); await shot(desk, '8-replay-desktop');
   await hold(phone, phone.getByText('Hold to approve').first());
   await until(async () => (await api(`/decisions/${d2.id}`)).decision.status === 'executed', 40000);
