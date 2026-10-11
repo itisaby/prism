@@ -1,0 +1,222 @@
+# PRISM demo workloads.
+#   shop:     storefront, cart-api (podinfo), redis, checkout-worker (prism/checkout:v1, built into minikube), load-gen
+#   payments: ledger (podinfo)
+# scripts/break.sh points checkout-worker at prism/checkout:v2-bad (a tag that doesn't exist) -> ImagePullBackOff.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: shop
+  labels: { prism.dev/demo: "true" }
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: payments
+  labels: { prism.dev/demo: "true" }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: storefront
+  namespace: shop
+  labels: { app: storefront, tier: frontend }
+spec:
+  replicas: 2
+  revisionHistoryLimit: 10
+  selector: { matchLabels: { app: storefront } }
+  template:
+    metadata:
+      labels: { app: storefront, tier: frontend }
+    spec:
+      containers:
+        - name: storefront
+          image: ghcr.io/stefanprodan/podinfo:6.7.1
+          imagePullPolicy: IfNotPresent
+          command: ["./podinfo", "--port=9898", "--level=info", "--ui-message=PRISM shop storefront", "--cache-server=tcp://redis:6379"]
+          ports: [{ name: http, containerPort: 9898 }]
+          readinessProbe: { httpGet: { path: /readyz, port: http }, periodSeconds: 5 }
+          livenessProbe: { httpGet: { path: /healthz, port: http }, periodSeconds: 10 }
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { cpu: 200m, memory: 96Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: storefront
+  namespace: shop
+  labels: { app: storefront }
+spec:
+  selector: { app: storefront }
+  ports: [{ name: http, port: 80, targetPort: http }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cart-api
+  namespace: shop
+  labels: { app: cart-api, tier: backend }
+spec:
+  replicas: 2
+  revisionHistoryLimit: 10
+  selector: { matchLabels: { app: cart-api } }
+  template:
+    metadata:
+      labels: { app: cart-api, tier: backend }
+    spec:
+      containers:
+        - name: cart-api
+          image: ghcr.io/stefanprodan/podinfo:6.7.1
+          imagePullPolicy: IfNotPresent
+          command: ["./podinfo", "--port=9898", "--level=info", "--ui-message=PRISM cart api", "--cache-server=tcp://redis:6379"]
+          ports: [{ name: http, containerPort: 9898 }]
+          readinessProbe: { httpGet: { path: /readyz, port: http }, periodSeconds: 5 }
+          livenessProbe: { httpGet: { path: /healthz, port: http }, periodSeconds: 10 }
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { cpu: 200m, memory: 96Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cart-api
+  namespace: shop
+  labels: { app: cart-api }
+spec:
+  selector: { app: cart-api }
+  ports: [{ name: http, port: 80, targetPort: http }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: shop
+  labels: { app: redis, tier: data }
+spec:
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector: { matchLabels: { app: redis } }
+  template:
+    metadata:
+      labels: { app: redis, tier: data }
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          imagePullPolicy: IfNotPresent
+          args: ["--save", "", "--appendonly", "no", "--maxmemory", "48mb"]
+          ports: [{ name: redis, containerPort: 6379 }]
+          readinessProbe: { exec: { command: ["redis-cli", "ping"] }, periodSeconds: 5 }
+          resources:
+            requests: { cpu: 10m, memory: 16Mi }
+            limits: { cpu: 100m, memory: 64Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: shop
+  labels: { app: redis }
+spec:
+  selector: { app: redis }
+  ports: [{ name: redis, port: 6379, targetPort: redis }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: checkout-worker
+  namespace: shop
+  labels: { app: checkout-worker, tier: backend }
+  annotations:
+    kubernetes.io/description: "Processes checkout orders from the queue. Healthy image: prism/checkout:v1."
+spec:
+  replicas: 2
+  revisionHistoryLimit: 10
+  progressDeadlineSeconds: 90
+  selector: { matchLabels: { app: checkout-worker } }
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxSurge: 1, maxUnavailable: 0 }
+  template:
+    metadata:
+      labels: { app: checkout-worker, tier: backend }
+    spec:
+      terminationGracePeriodSeconds: 2
+      containers:
+        - name: worker
+          image: prism/checkout:v1
+          imagePullPolicy: IfNotPresent
+          env:
+            - { name: CHECKOUT_VERSION, value: v1 }
+          resources:
+            requests: { cpu: 5m, memory: 8Mi }
+            limits: { cpu: 50m, memory: 32Mi }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: load-gen
+  namespace: shop
+  labels: { app: load-gen, tier: tooling }
+spec:
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector: { matchLabels: { app: load-gen } }
+  template:
+    metadata:
+      labels: { app: load-gen, tier: tooling }
+    spec:
+      terminationGracePeriodSeconds: 1
+      containers:
+        - name: load-gen
+          image: curlimages/curl:8.10.1
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "-c"]
+          args:
+            - |
+              echo "load-gen: hitting storefront and cart-api"
+              while true; do
+                for i in 1 2 3 4 5; do
+                  curl -s -o /dev/null -w "storefront %{http_code} %{time_total}s\n" http://storefront.shop.svc/ || echo "storefront unreachable"
+                  curl -s -o /dev/null http://cart-api.shop.svc/api/info || true
+                done
+                sleep 1
+              done
+          resources:
+            requests: { cpu: 5m, memory: 8Mi }
+            limits: { cpu: 50m, memory: 32Mi }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ledger
+  namespace: payments
+  labels: { app: ledger, tier: backend }
+spec:
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector: { matchLabels: { app: ledger } }
+  template:
+    metadata:
+      labels: { app: ledger, tier: backend }
+    spec:
+      containers:
+        - name: ledger
+          image: ghcr.io/stefanprodan/podinfo:6.7.1
+          imagePullPolicy: IfNotPresent
+          command: ["./podinfo", "--port=9898", "--level=info", "--ui-message=PRISM payments ledger"]
+          ports: [{ name: http, containerPort: 9898 }]
+          readinessProbe: { httpGet: { path: /readyz, port: http }, periodSeconds: 5 }
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { cpu: 200m, memory: 96Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ledger
+  namespace: payments
+  labels: { app: ledger }
+spec:
+  selector: { app: ledger }
+  ports: [{ name: http, port: 80, targetPort: http }]

@@ -42,9 +42,14 @@ export function podReason(p: any): string {
   return phase;
 }
 
+// The kubelet alternates ErrImagePull <-> ImagePullBackOff (and Error <-> CrashLoopBackOff) for one failure;
+// report a stable reason so watchers/incident signatures don't flap. The raw value stays in rawReason.
+const STABLE_REASON: Record<string, string> = { ErrImagePull: 'ImagePullBackOff', Error: 'CrashLoopBackOff' };
+
 export function podRow(p: any) {
   const cs: any[] = p.status?.containerStatuses ?? [];
-  const reason = podReason(p);
+  const rawReason = podReason(p);
+  const reason = STABLE_REASON[rawReason] && !(rawReason === 'Error' && !cs.some(c => c.restartCount > 0)) ? STABLE_REASON[rawReason] : rawReason;
   const tone: Tone = HEALTHY_REASONS.has(reason) ? 'ok' : PENDING_REASONS.has(reason) ? 'warn' : 'bad';
   return {
     namespace: p.metadata.namespace as string,
@@ -54,6 +59,7 @@ export function podRow(p: any) {
     ready: `${cs.filter(c => c.ready).length}/${p.spec?.containers?.length ?? cs.length}`,
     restarts: cs.reduce((n, c) => n + (c.restartCount ?? 0), 0),
     reason,
+    rawReason,
     image: (p.spec?.containers ?? []).map((c: any) => c.image).join(', '),
     node: (p.spec?.nodeName ?? '') as string,
     age: age(p.metadata.creationTimestamp),
@@ -61,7 +67,7 @@ export function podRow(p: any) {
   };
 }
 export type PodRow = ReturnType<typeof podRow>;
-export const isProblem = (r: PodRow) => r.tone !== 'ok' || r.restarts >= 3;
+export const isProblem = (r: PodRow) => r.reason !== 'Terminating' && (r.tone !== 'ok' || r.restarts >= 3);
 
 export const revisionOf = (o: any): number => Number(o?.metadata?.annotations?.['deployment.kubernetes.io/revision'] ?? 0);
 export const imagesOf = (tpl: any): string => (tpl?.spec?.containers ?? []).map((c: any) => c.image).join(', ');

@@ -1,0 +1,127 @@
+# PRISM Kubernetes MCP server, namespace prism-system.
+# RBAC: read-only across the cluster (ClusterRole) + deployment writes in namespace `shop` only (Role).
+# Writes anywhere else (e.g. payments) are refused by the API server, and the MCP server reports that verbatim.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: prism-system
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: k8s-mcp
+  namespace: prism-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: prism-k8s-mcp-read
+rules:
+  - apiGroups: [""]
+    resources: [namespaces, nodes, pods, pods/log, events, services, endpoints]
+    verbs: [get, list, watch]
+  - apiGroups: [discovery.k8s.io]
+    resources: [endpointslices]
+    verbs: [get, list, watch]
+  - apiGroups: [events.k8s.io]
+    resources: [events]
+    verbs: [get, list, watch]
+  - apiGroups: [apps]
+    resources: [deployments, replicasets]
+    verbs: [get, list, watch]
+  - apiGroups: [metrics.k8s.io]
+    resources: [pods, nodes]
+    verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: prism-k8s-mcp-read
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: prism-k8s-mcp-read }
+subjects:
+  - { kind: ServiceAccount, name: k8s-mcp, namespace: prism-system }
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: prism-k8s-mcp-operate
+  namespace: shop
+rules:
+  - apiGroups: [apps]
+    resources: [deployments]
+    verbs: [get, list, patch, update]
+  - apiGroups: [apps]
+    resources: [deployments/scale]
+    verbs: [get, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: prism-k8s-mcp-operate
+  namespace: shop
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: prism-k8s-mcp-operate }
+subjects:
+  - { kind: ServiceAccount, name: k8s-mcp, namespace: prism-system }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: k8s-mcp
+  namespace: prism-system
+  labels: { app: k8s-mcp }
+spec:
+  replicas: 1
+  revisionHistoryLimit: 5
+  selector: { matchLabels: { app: k8s-mcp } }
+  template:
+    metadata:
+      labels: { app: k8s-mcp }
+    spec:
+      serviceAccountName: k8s-mcp
+      automountServiceAccountToken: true
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000   # `node` in node:24-alpine
+        runAsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: mcp
+          image: prism/k8s-mcp:dev
+          imagePullPolicy: Never
+          ports: [{ name: http, containerPort: 8080 }]
+          env:
+            - name: MCP_TOKEN
+              valueFrom: { secretKeyRef: { name: k8s-mcp-token, key: token } }
+            - { name: PORT, value: "8080" }
+            - { name: DISPLAY_TZ, value: America/New_York }
+            # trust the cluster CA for fetch() to https://kubernetes.default.svc
+            - { name: NODE_EXTRA_CA_CERTS, value: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+          readinessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 15
+            initialDelaySeconds: 10
+          resources:
+            requests: { cpu: 20m, memory: 96Mi }
+            limits: { cpu: 500m, memory: 256Mi }
+      volumes:
+        - name: tmp
+          emptyDir: { sizeLimit: 64Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: k8s-mcp
+  namespace: prism-system
+  labels: { app: k8s-mcp }
+spec:
+  selector: { app: k8s-mcp }
+  ports: [{ name: http, port: 80, targetPort: http }]

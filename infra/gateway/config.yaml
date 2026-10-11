@@ -1,0 +1,40 @@
+# agentgateway v1.6.0 — PRISM's governance layer in front of the Kubernetes MCP server.
+# Reads are allow-listed. Every other tools/call needs an x-prism-approval JWT (ES256, signed by PRISM when a person
+# approves) whose `tool` matches the call and whose `argsBody` is exactly the request's "arguments" object.
+# A denied call returns HTTP 400 (JSON-RPC -32602 "Unknown tool") and is visible in the access log.
+config:
+  adminAddr: 0.0.0.0:15000
+binds:
+- port: 7200
+  listeners:
+  - name: mcp
+    routes:
+    - name: k8s
+      matches:
+      - path:
+          pathPrefix: /k8s
+      policies:
+        jwtAuth:
+          mode: optional
+          issuer: prism
+          audiences: [agentgateway]
+          jwks:
+            file: /config/approval-jwks.json
+          location:
+            header:
+              name: x-prism-approval
+        mcpAuthorization:
+          rules:
+          - require: >-
+              mcp.methodName != "tools/call"
+              || mcp.tool.name in ["cluster_overview", "list_deployments", "list_pods", "list_events",
+                                   "get_pod_logs", "get_usage", "get_usage_history", "describe_deployment", "list_services"]
+              || (jwt.tool == mcp.tool.name
+                  && string(request.body).contains(jwt.argsBody)
+                  && size(string(request.body).split("\"arguments\":")) == 2)
+      backends:
+      - mcp:
+          targets:
+          - name: k8s
+            mcp:
+              host: http://host.docker.internal:7300/mcp
