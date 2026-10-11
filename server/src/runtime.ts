@@ -5,6 +5,7 @@ import type { Binding, Panel, Stats, Workspace } from '../../shared/types.ts';
 import { activity, broadcast } from './bus.ts';
 import { store } from './db.ts';
 import { callTool, getConnection, isWriteTool, toolInfo, discover } from './mcp.ts';
+import { metric } from './telemetry.ts';
 
 // ---------------------------------------------------------------- A2UI validation (shared with the browser catalog)
 type Validator = (components: unknown[], data: unknown) => string[];
@@ -23,6 +24,7 @@ const ACTION_COMPONENTS = new Set(['DataTable', 'CardList', 'StatusList']);
 
 /** Components as the browser sees them: PRISM injects each panel's record actions into the components that show records. */
 export function renderComponents(panel: Panel) {
+  if (!Array.isArray(panel.components)) return [];
   if (!panel.actions?.length) return panel.components;
   const recordActions = panel.actions.map(a => ({ id: a.id, label: a.label, ...(a.when ? { when: a.when } : {}) }));
   return panel.components.map(c => (ACTION_COMPONENTS.has(String(c.component)) ? { ...c, recordActions } : c));
@@ -51,7 +53,8 @@ export async function runBinding(b: Binding, user: string) {
 export async function validatePanel(p: Panel, user: string): Promise<{ problems: string[]; data?: unknown; raw?: unknown }> {
   const problems: string[] = [];
   if (!p.id || !p.title) problems.push('panel needs id and title');
-  if (!Array.isArray(p.components) || !p.components.some(c => c?.id === 'root')) problems.push(`panel ${p.id}: one component must have id "root"`);
+  if (!Array.isArray(p.components)) return { problems: [...problems, `panel ${p.id}: "components" must be the A2UI component list (an array with one id "root")`] };
+  if (!p.components.some(c => c?.id === 'root')) problems.push(`panel ${p.id}: one component must have id "root"`);
   const conn = getConnection(p.binding?.connectionId, user);
   if (!conn) return { problems: [...problems, `panel ${p.id}: unknown connectionId "${p.binding?.connectionId}"`] };
   await discover(conn, user);
@@ -109,8 +112,12 @@ export async function refreshPanel(wsId: string, panelId: string) {
   const p = w?.panels.find(x => x.id === panelId);
   if (!w || !p) return;
   const key = `${wsId}|${panelId}`;
+  const t0 = Date.now();
+  const tags = { connection: p.binding.connectionId, tool: p.binding.tool };
   try {
     const { raw, data } = await runBinding(p.binding, w.owner);
+    metric.count('prism.panel.refresh', 1, { ...tags, ok: true, model_calls: 0 });
+    metric.distribution('prism.panel.refresh_ms', Date.now() - t0, 'millisecond', tags);
     const entry = { data, at: new Date().toISOString() };
     lastData.set(key, entry);
     broadcast(wsId, { type: 'panel-data', panelId, ...entry });
@@ -121,6 +128,7 @@ export async function refreshPanel(wsId: string, panelId: string) {
     onRaw(w, p, raw);
     return entry;
   } catch (e) {
+    metric.count('prism.panel.refresh', 1, { ...tags, ok: false });
     const prev = lastData.get(key);
     const entry = { data: prev?.data, at: prev?.at ?? new Date().toISOString(), error: (e as Error).message };
     lastData.set(key, entry);

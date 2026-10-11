@@ -52,7 +52,7 @@ export async function applyOps(id: string, user: string, baseVersion: number | u
       case 'replace_view': {
         const p = find(op.panelId);
         if (!p) { problems.push(`no panel "${op.panelId}"`); break; }
-        p.components = op.components; if (op.title) p.title = op.title; touched.add(p.id); break;
+        p.components = op.components ?? (op as any).view; if (op.title) p.title = op.title; touched.add(p.id); break;
       }
       case 'update_binding': {
         const p = find(op.panelId);
@@ -101,6 +101,9 @@ export async function applyOps(id: string, user: string, baseVersion: number | u
 }
 
 function normalizePanel(p: Panel, w: Workspace): Panel {
+  // Models sometimes name the component list "view" (after the replace_view op); accept it.
+  const anyP = p as Panel & { view?: unknown };
+  if (!Array.isArray(p.components) && Array.isArray(anyP.view)) { p = { ...p, components: anyP.view as Panel['components'] }; delete (p as any).view; }
   const layout = clampLayout(p.layout ?? { x: 0, y: Infinity, w: 6, h: 4 });
   return { ...p, id: p.id || `p-${randomUUID().slice(0, 6)}`, refreshSec: Math.max(3, Math.min(300, p.refreshSec || 10)), layout,
     binding: { ...p.binding, args: p.binding?.args ?? {}, transform: p.binding?.transform || '$' } };

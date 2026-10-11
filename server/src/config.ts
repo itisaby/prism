@@ -29,6 +29,8 @@ export const config = {
   stripeKey: process.env.STRIPE_SECRET_KEY || '',
   stripeViaGateway: process.env.STRIPE_VIA_GATEWAY === '1',
   nimbleKey: process.env.NIMBLE_API_KEY || '',
+  sentryMcpUrl: process.env.SENTRY_MCP_URL || 'http://localhost:7102/mcp',
+  sentryMcpOn: !!process.env.SENTRY_ACCESS_TOKEN,
   // USD per million tokens for claude-opus-5-5, matching agentgateway's cost accounting (override via env).
   price: {
     input: num(process.env.PRISM_PRICE_INPUT, 4),

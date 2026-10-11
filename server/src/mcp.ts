@@ -50,6 +50,13 @@ export function loadConnections() {
       url: gw && config.stripeViaGateway ? `${gw}/stripe` : 'https://mcp.stripe.com', sealedAuth: seal(`Bearer ${config.stripeKey}`),
       readPattern: '^(list_|retrieve_|search_|get_|fetch_)',
     });
+  // Sentry: errors, issues, traces, Seer, via the local bridge (mcp-sentry/) around Sentry's official MCP server.
+  if (config.sentryMcpOn)
+    connections.set('sentry', {
+      id: 'sentry', name: 'Sentry', builtin: true, viaGateway: !!gw,
+      url: gw ? `${gw}/sentry/mcp` : config.sentryMcpUrl,
+      readPattern: '^(whoami|(find|get|search|list)_[a-z_]+)$',
+    });
   // Nimble: live web context (search, extract, map, crawl) over its hosted MCP. Web results are untrusted data.
   if (config.nimbleKey)
     connections.set('nimble', {

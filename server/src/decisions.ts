@@ -9,7 +9,7 @@ import { store } from './db.ts';
 import { callTool, isWriteTool, toolInfo, discover, getConnection } from './mcp.ts';
 import { emptyReceipt } from './llm.ts';
 import { latest, validatePanel } from './runtime.ts';
-import { span, toolSpan } from './telemetry.ts';
+import { metric, span, toolSpan } from './telemetry.ts';
 import { canEdit, canView, getWorkspace } from './workspaces.ts';
 
 export class Forbidden extends Error {}
@@ -163,6 +163,7 @@ async function approveInner(id: string, user: string) {
       const gateway = config.gatewayUrl ? 'Checked at agentgateway: signature + exact arguments · allowed' : 'Direct (no gateway configured)';
       activity(d.workspaceId, 'gateway', `${tool} ran in ${Date.now() - t0} ms · ${gateway}`, { args });
       d.status = 'executed';
+      metric.count('prism.decision.executed', 1, { tool, source: d.source });
       d.result = { ok: true, text: changes.join(' · ') || 'Done', gateway };
       if (incident) saveIncident({ ...incident, status: 'resolving' });
     } catch (e) {
@@ -176,6 +177,7 @@ async function approveInner(id: string, user: string) {
 
 function fail(d: Decision, text: string) {
   d.status = 'failed';
+  metric.count('prism.decision.failed', 1, { tool: d.proposedAction.tool, source: d.source });
   d.result = { ok: false, text, gateway: /gateway|400|denied|unauthori/i.test(text) ? 'Blocked or rejected upstream' : undefined };
   activity(d.workspaceId, 'error', `${d.title}: ${text}`);
   return saveDecision(d);

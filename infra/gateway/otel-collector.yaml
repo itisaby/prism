@@ -19,7 +19,7 @@ processors:
           not (status.code == STATUS_CODE_ERROR
                or name == "POST /v1/messages"
                or IsMatch(name, "^POST api\\.anthropic\\.com")
-               or IsMatch(name, "^tools/call .*(set_image|rollback_deployment|restart_deployment|scale_deployment|assign_mentor|resolve_help_request|claim_task|update_task_status|create_task|create_issue|stripe_api_write)"))
+               or IsMatch(name, "^tools/call .*(set_image|rollback_deployment|restart_deployment|scale_deployment|assign_mentor|resolve_help_request|claim_task|update_task_status|create_task|create_issue|stripe_api_write|update_issue|analyze_issue_with_seer)"))
 
 exporters:
   otlp/jaeger:

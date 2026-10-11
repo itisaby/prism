@@ -4,7 +4,7 @@ import type { Receipt } from '../../shared/types.ts';
 import { activity } from './bus.ts';
 import { config } from './config.ts';
 import { callTool, discover, getConnection, isWriteTool, listConnections } from './mcp.ts';
-import { agentSpan, toolSpan } from './telemetry.ts';
+import { agentSpan, metric, toolSpan } from './telemetry.ts';
 
 const client = config.llmGatewayUrl
   ? new Anthropic({ baseURL: config.llmGatewayUrl, apiKey: 'held-by-agentgateway' })
@@ -99,7 +99,13 @@ async function runLoop(opts: LoopOpts): Promise<unknown> {
         thinking: { type: 'adaptive' },
         output_config: { effort: config.effort },
       } as any, { headers: { 'x-prism-user': opts.user } });
+      const before = opts.receipt.costUsd;
       addUsage(opts.receipt, res.usage);
+      const mt = { agent: opts.label, model: config.model };
+      metric.count('prism.model.calls', 1, mt);
+      metric.count('prism.model.input_tokens', (res.usage.input_tokens ?? 0) + (res.usage.cache_read_input_tokens ?? 0), mt);
+      metric.count('prism.model.output_tokens', res.usage.output_tokens ?? 0, mt);
+      metric.distribution('prism.model.cost_usd', opts.receipt.costUsd - before, 'none', mt);
       activity(opts.wsId, 'model', `${opts.label}: ${config.model} call ${opts.receipt.modelCalls} · ${((Date.now() - started) / 1000).toFixed(1)} s · ` +
         `${res.usage.input_tokens + (res.usage.cache_read_input_tokens ?? 0)} in / ${res.usage.output_tokens} out`);
       if (res.stop_reason === 'refusal') throw new AgentStopped('The model declined this request.');

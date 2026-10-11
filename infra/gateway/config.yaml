@@ -1,4 +1,4 @@
-# agentgateway v1.6.0 — PRISM's governance layer in front of its curated MCP servers (k8s, event DB, GitHub, Stripe).
+# agentgateway v1.6.0 — PRISM's governance layer in front of its curated MCP servers (k8s, event DB, GitHub, Stripe, Sentry).
 # Reads are allow-listed. Every other tools/call needs an x-prism-approval JWT (ES256, signed by PRISM when a person
 # approves) whose `tool` matches the call and whose `argsBody` is exactly the request's "arguments" object.
 # A denied call returns HTTP 400 (JSON-RPC -32602 "Unknown tool") and is visible in the access log.
@@ -144,3 +144,31 @@ binds:
           - name: stripe
             mcp:
               host: https://mcp.stripe.com
+    - name: sentry
+      matches:
+      - path:
+          pathPrefix: /sentry
+      policies:
+        jwtAuth:
+          mode: optional
+          issuer: prism
+          audiences: [agentgateway]
+          jwks:
+            file: /config/approval-jwks.json
+          location:
+            header:
+              name: x-prism-approval
+        mcpAuthorization:
+          rules:
+          - require: >-
+              mcp.methodName != "tools/call"
+              || mcp.tool.name.matches("^(whoami|(find|get|search|list)_[a-z_]+)$")
+              || (jwt.tool == mcp.tool.name
+                  && string(request.body).contains(jwt.argsBody)
+                  && size(string(request.body).split("\"arguments\":")) == 2)
+      backends:
+      - mcp:
+          targets:
+          - name: sentry
+            mcp:
+              host: http://host.docker.internal:7102/mcp

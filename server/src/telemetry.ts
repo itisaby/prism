@@ -21,3 +21,19 @@ export const toolSpan = <T>(tool: string, connection: string, fn: () => Promise<
 export function capture(e: unknown, context?: Record<string, unknown>) {
   if (on()) Sentry.captureException(e, context ? { extra: context } : undefined);
 }
+
+// ---------------------------------------------------------------- logs + metrics (Sentry Logs / Metrics)
+type Attrs = Record<string, string | number | boolean>;
+
+/** Every Inspector activity line also goes to Sentry Logs (refresh chatter excluded by the caller). */
+export function log(level: 'info' | 'warn' | 'error', message: string, attributes: Attrs = {}) {
+  if (!on()) return;
+  Sentry.logger[level](message, attributes);
+}
+
+export const metric = {
+  count(name: string, value = 1, attributes: Attrs = {}) { if (on()) Sentry.metrics.count(name, value, { attributes }); },
+  distribution(name: string, value: number, unit: 'millisecond' | 'none' = 'none', attributes: Attrs = {}) {
+    if (on()) Sentry.metrics.distribution(name, value, { unit, attributes } as any);
+  },
+};

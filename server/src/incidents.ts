@@ -8,7 +8,7 @@ import { AgentStopped, READ_TOOL, capabilitiesText, emptyReceipt, runReadTool, t
 import { CATALOG_GUIDE, INVESTIGATOR_SYSTEM } from './prompts.ts';
 import { addModelCost, evaluate, resetStats, validatePanel } from './runtime.ts';
 import { getWorkspace } from './workspaces.ts';
-import { capture, span } from './telemetry.ts';
+import { capture, metric, span } from './telemetry.ts';
 
 export let autoInvestigate = true;
 const clearCounts = new Map<string, number>(); // incident id → consecutive healthy evaluations
@@ -103,6 +103,7 @@ function openIncident(w: Workspace, wt: Watcher, f: { resource: string; reason: 
     status: 'open', openedAt: new Date().toISOString(), receipt: emptyReceipt(),
   };
   saveIncident(i);
+  metric.count('prism.incident.opened', 1, { watcher: wt.id, reason: i.reason });
   activity(w.id, 'incident', `Incident #${i.number}: ${wt.title} · ${i.resource} · ${i.reason}`, { incidentId: i.id });
   const pb = findPlaybook(w.id, i);
   if (pb) return void replayPlaybook(i, pb);
@@ -159,6 +160,8 @@ async function replayInner(i: Incident, pb: Playbook) {
     proposedAction: pb.actionTemplate, source: 'playbook', playbookId: pb.id, receipt: emptyReceipt(),
   }, w.owner);
   d.matchMs = Date.now() - t0;
+  metric.distribution('prism.playbook.match_ms', d.matchMs, 'millisecond', { resource: i.resource });
+  metric.count('prism.incident.handled', 1, { path: 'playbook', model_calls: 0, resource: i.resource });
   saveDecision(d);
   store.put('playbook', { ...pb, uses: pb.uses + 1 }, w.id);
   saveIncident({ ...i, status: 'awaiting-approval', decisionId: d.id });
@@ -259,6 +262,7 @@ export async function investigate(incidentId: string): Promise<Decision | undefi
       return undefined;
     }
     if (decision) {
+      metric.count('prism.incident.handled', 1, { path: 'agent', model_calls: receipt.modelCalls, resource: i.resource });
       decision.receipt = receipt;
       saveDecision(decision);
       saveIncident({ ...fresh, receipt, status: fresh.status === 'resolved' ? 'resolved' : 'awaiting-approval', decisionId: decision.id });

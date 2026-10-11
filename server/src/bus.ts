@@ -2,6 +2,7 @@
 import { randomUUID } from 'node:crypto';
 import type { WebSocket } from 'ws';
 import type { Activity, ActivityKind, ServerMessage } from '../../shared/types.ts';
+import { log } from './telemetry.ts';
 
 const subscribers = new Map<string, Set<WebSocket>>();
 const recent = new Map<string, Activity[]>(); // last activity per workspace, replayed to new subscribers
@@ -27,7 +28,10 @@ export function activity(workspaceId: string, kind: ActivityKind, text: string, 
   if (list.length > 200) list.splice(0, list.length - 200);
   recent.set(workspaceId, list);
   broadcast(workspaceId, { type: 'activity', item });
-  if (kind !== 'refresh') console.log(`[${workspaceId.slice(0, 8)}] ${kind}: ${text}`);
+  if (kind !== 'refresh') {
+    console.log(`[${workspaceId.slice(0, 8)}] ${kind}: ${text}`);
+    log(kind === 'error' ? 'error' : 'info', text, { 'prism.workspace': workspaceId, 'prism.kind': kind });
+  }
   return item;
 }
 

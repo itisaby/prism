@@ -104,3 +104,20 @@ spec:
   remote:
     type: streamable-http
     url: http://localhost:7101/mcp
+---
+apiVersion: ar.dev/v1alpha1
+kind: MCPServer
+metadata:
+  name: prism-sentry
+  labels:
+    prism.dev/category: observability
+    prism.dev/demo: "true"
+  annotations:
+    prism.dev/auth: bearer
+    prism.dev/tools: search_issues,search_events,get_issue_details,find_projects,find_releases,analyze_issue_with_seer,update_issue
+spec:
+  title: Sentry (PRISM bridge)
+  description: "Sentry's official MCP server (@sentry/mcp-server) behind PRISM's HTTP bridge, authenticated with a Sentry access token and governed by agentgateway: errors, issues, events, releases, Seer."
+  remote:
+    type: streamable-http
+    url: http://localhost:7102/mcp
