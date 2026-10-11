@@ -1,6 +1,7 @@
 // Probe the k8s MCP server like PRISM does: negotiate the protocol, list tools, optionally call one.
 //   npx tsx scripts/probe.ts                         -> list tools
 //   npx tsx scripts/probe.ts list_pods '{"problemsOnly":true}'
+// Env: PROBE_LEGACY=1 skips version negotiation (2025-era initialize handshake).
 // Env: K8S_MCP_URL (default http://127.0.0.1:7300/mcp); K8S_MCP_TOKEN (read from ../.env if unset; never printed).
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -19,7 +20,7 @@ const token = process.env.K8S_MCP_TOKEN || tokenFromEnvFile();
 if (!token) { console.error('K8S_MCP_TOKEN not set (env or .env)'); process.exit(1); }
 
 const [tool, rawArgs] = process.argv.slice(2);
-const client = new Client({ name: 'prism-probe', version: '0.1.0' }, { versionNegotiation: { mode: 'auto' } });
+const client = new Client({ name: 'prism-probe', version: '0.1.0' }, process.env.PROBE_LEGACY ? {} : { versionNegotiation: { mode: 'auto' } });
 const transport = new StreamableHTTPClientTransport(url, { requestInit: { headers: { Authorization: `Bearer ${token}` } } });
 
 const t0 = Date.now();

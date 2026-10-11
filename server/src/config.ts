@@ -23,6 +23,11 @@ export const config = {
   secret: process.env.PRISM_SECRET ?? '',
   k8sMcpUrl: process.env.K8S_MCP_URL || 'http://localhost:7300/mcp',
   k8sToken: process.env.K8S_MCP_TOKEN || '',
+  eventMcpUrl: process.env.EVENT_MCP_URL || 'http://localhost:7101/mcp',
+  eventToken: process.env.EVENT_MCP_TOKEN || '',
+  githubToken: process.env.GITHUB_TOKEN || '',
+  stripeKey: process.env.STRIPE_SECRET_KEY || '',
+  stripeViaGateway: process.env.STRIPE_VIA_GATEWAY === '1',
   // USD per million tokens (estimate; override if pricing differs).
   price: {
     input: num(process.env.PRISM_PRICE_INPUT, 5),

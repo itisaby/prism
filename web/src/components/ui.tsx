@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import QRCode from 'qrcode';
 import { Icon } from './Icon.tsx';
 import { setUser, USERS } from '../lib/api.ts';
@@ -37,11 +37,11 @@ export function Modal({ open, onClose, title, children, width = 440 }: { open: b
 export interface ToastMsg { id: number; text: ReactNode; tone?: 'ok' | 'bad' | 'info'; sub?: ReactNode }
 export function useToasts() {
   const [toasts, setToasts] = useState<ToastMsg[]>([]);
-  const push = (t: Omit<ToastMsg, 'id'>, ms = 6000) => {
+  const push = useCallback((t: Omit<ToastMsg, 'id'>, ms = 6000) => {
     const id = Date.now() + Math.random();
     setToasts(x => [...x, { ...t, id }]);
     setTimeout(() => setToasts(x => x.filter(y => y.id !== id)), ms);
-  };
+  }, []);
   const view = (
     <div className="toasts">
       {toasts.map(t => (

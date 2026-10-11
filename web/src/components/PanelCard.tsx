@@ -4,17 +4,11 @@ import { Icon } from './Icon.tsx';
 import type { Panel } from '../lib/types.ts';
 import type { PanelDatum } from '../lib/useWorkspaceSocket.ts';
 import { timeAgo } from '../lib/format.ts';
+import { connectionIcon } from '../lib/connections.ts';
 
 // The A2UI renderer registers custom elements, so it only runs in the browser.
 const PanelSurface = dynamic(() => import('./PanelSurface.tsx'), { ssr: false, loading: () => <div className="skeleton" /> });
 
-export function sourceIcon(name: string): string {
-  const n = name.toLowerCase();
-  if (n.includes('kube') || n.includes('k8s')) return 'container';
-  if (n.includes('git')) return 'git';
-  if (n.includes('event') || n.includes('db') || n.includes('postgres') || n.includes('sql')) return 'database';
-  return 'plug';
-}
 
 export function PanelCard({
   panel, datum, sourceName, firing, now, onRecordAction, draggable, compact,
@@ -44,7 +38,7 @@ export function PanelCard({
         {firing && <span className="firing-pill"><span className="pulse" />{firing}</span>}
         <span className="spacer" />
         <span className={`source s-${state}`}>
-          <Icon name={sourceIcon(sourceName)} size={12} />
+          <Icon name={connectionIcon(panel.binding.connectionId, sourceName)} size={12} />
           {sourceName} · {fresh}
           {state === 'stale' && <Icon name="clock" size={12} />}
           {state === 'error' && <Icon name="circle-alert" size={12} />}

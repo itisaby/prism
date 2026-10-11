@@ -25,7 +25,7 @@ The model runs only when something genuinely new happens: composing a workspace 
             ▼
  agentgateway v1.6.0 (:7200) — reads allow-listed; writes need a signed approval (CEL)
             ▼
- Kubernetes MCP server (mcp-k8s/, in-cluster, RBAC: writes only in ns shop)
+ MCP servers: Kubernetes (mcp-k8s/, in-cluster, RBAC: writes only in ns shop) · Event DB (mcp-event/) · GitHub · Stripe (test mode) · any MCP URL
 ```
 
 ## Run

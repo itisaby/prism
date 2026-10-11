@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { Icon, Logo } from './Icon.tsx';
-import { sourceIcon } from './PanelCard.tsx';
+import { connectionIcon, loadConnections } from '../lib/connections.ts';
 import { Badge, IdentitySwitch, Modal } from './ui.tsx';
 import { api, fixtureMode } from '../lib/api.ts';
 import type { ConnectionView, Playbook } from '../lib/types.ts';
@@ -19,7 +19,7 @@ export function Rail({ activeId, user, playbooks, open, onClose, onConnected }: 
 
   const load = useCallback(() => {
     api<{ id: string; title: string; owner: string }[]>('/workspaces').then(setWorkspaces).catch(() => {});
-    api<ConnectionView[]>('/connections').then(setConnections).catch(() => {});
+    loadConnections(true).then(setConnections);
   }, []);
   useEffect(() => { load(); }, [load]);
 
@@ -45,7 +45,7 @@ export function Rail({ activeId, user, playbooks, open, onClose, onConnected }: 
           {connections.map(c => (
             <div key={c.id} className="rail-server" title={c.error ?? c.url}>
               <span className={`dot ${c.status === 'ok' ? 'd-ok' : 'd-bad'}`} />
-              <Icon name={sourceIcon(c.name)} size={14} />
+              <Icon name={connectionIcon(c.id, c.name)} size={14} />
               <span className="ellipsis">{c.name}</span>
               <span className="spacer" />
               {c.viaGateway && <span className="gw" title="Routed through agentgateway"><Icon name="shield" size={11} /></span>}
@@ -83,11 +83,12 @@ function AddConnectionDialog({ open, onClose, onDone }: { open: boolean; onClose
   const [err, setErr] = useState<string>();
   const [query, setQuery] = useState('');
   const [entries, setEntries] = useState<RegistryEntry[] | null>(null);
+  const [registryOk, setRegistryOk] = useState(true);
 
   useEffect(() => {
     if (!open || tab !== 'registry') return;
     const t = setTimeout(() => {
-      api<RegistryEntry[]>(`/registry?q=${encodeURIComponent(query)}`).then(setEntries).catch(() => setEntries([]));
+      api<RegistryEntry[]>(`/registry?q=${encodeURIComponent(query)}`).then(r => setEntries(Array.isArray(r) ? r : [])).catch(() => { setRegistryOk(false); setTab('url'); });
     }, 200);
     return () => clearTimeout(t);
   }, [open, tab, query]);
@@ -109,7 +110,7 @@ function AddConnectionDialog({ open, onClose, onDone }: { open: boolean; onClose
   return (
     <Modal open={open} onClose={onClose} title="Add an MCP server" width={480}>
       <div className="tabs">
-        <button className={tab === 'registry' ? 'on' : ''} onClick={() => setTab('registry')}><Icon name="search" size={14} />agentregistry</button>
+        {registryOk && <button className={tab === 'registry' ? 'on' : ''} onClick={() => setTab('registry')}><Icon name="search" size={14} />agentregistry</button>}
         <button className={tab === 'url' ? 'on' : ''} onClick={() => setTab('url')}><Icon name="link" size={14} />Custom MCP URL</button>
       </div>
       {tab === 'registry' ? (
@@ -120,7 +121,7 @@ function AddConnectionDialog({ open, onClose, onDone }: { open: boolean; onClose
             {entries?.length === 0 && <div className="muted small">No matches. Paste a URL under “Custom MCP URL”.</div>}
             {entries?.map(e => (
               <button key={e.url} className="registry-item" disabled={busy} onClick={() => submit({ name: e.title ?? e.name, url: e.url })}>
-                <span className="soft-ic"><Icon name={sourceIcon(e.name)} size={16} /></span>
+                <span className="soft-ic"><Icon name={connectionIcon(e.name, e.title)} size={16} /></span>
                 <span className="registry-main">
                   <b>{e.title ?? e.name}</b>
                   <span className="muted small">{e.description ?? e.url}</span>

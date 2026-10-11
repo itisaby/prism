@@ -17,6 +17,8 @@ interface Connection {
   sealedAuth?: string;    // "Bearer …", sealed
   viaGateway: boolean;
   builtin?: boolean;
+  /** For servers that don't annotate tools: names matching this are treated as read-only (e.g. Stripe list_/retrieve_). */
+  readPattern?: string;
 }
 
 interface Discovery { tools: DiscoveredTool[]; protocolVersion?: string; error?: string; at: number }
@@ -26,13 +28,28 @@ const discovery = new Map<string, Discovery>();
 const clients = new Map<string, Promise<Client>>();
 
 export function loadConnections() {
-  if (config.k8sToken) {
-    const gw = config.gatewayUrl;
+  // Built-in sources. Curated servers go through agentgateway when PRISM_GATEWAY_URL is set (governed mode).
+  const gw = config.gatewayUrl;
+  if (config.k8sToken)
     connections.set('k8s', {
       id: 'k8s', name: 'Kubernetes', builtin: true, viaGateway: !!gw,
       url: gw ? `${gw}/k8s/mcp` : config.k8sMcpUrl, sealedAuth: seal(`Bearer ${config.k8sToken}`),
     });
-  }
+  connections.set('event', {
+    id: 'event', name: 'Event DB', builtin: true, viaGateway: !!gw,
+    url: gw ? `${gw}/event/mcp` : config.eventMcpUrl, sealedAuth: config.eventToken ? seal(`Bearer ${config.eventToken}`) : undefined,
+  });
+  if (config.githubToken)
+    connections.set('github', {
+      id: 'github', name: 'GitHub', builtin: true, viaGateway: !!gw,
+      url: gw ? `${gw}/github` : 'https://api.githubcopilot.com/mcp/', sealedAuth: seal(`Bearer ${config.githubToken}`),
+    });
+  if (config.stripeKey)
+    connections.set('stripe', {
+      id: 'stripe', name: 'Stripe (test mode)', builtin: true, viaGateway: !!gw && config.stripeViaGateway,
+      url: gw && config.stripeViaGateway ? `${gw}/stripe` : 'https://mcp.stripe.com', sealedAuth: seal(`Bearer ${config.stripeKey}`),
+      readPattern: '^(list_|retrieve_|search_|get_|fetch_)',
+    });
   for (const c of store.list<Connection>('connection')) connections.set(c.id, c);
 }
 
@@ -98,9 +115,10 @@ export async function discover(c: Connection, user: string, force = false): Prom
   try {
     const client = await clientFor(c, user);
     const res = await client.listTools();
+    const readRe = c.readPattern ? new RegExp(c.readPattern) : undefined;
     const tools: DiscoveredTool[] = res.tools.map((t: any) => ({
-      name: t.name, title: t.title, description: t.description, inputSchema: t.inputSchema,
-      outputSchema: t.outputSchema, annotations: t.annotations,
+      name: t.name, title: t.title, description: t.description, inputSchema: t.inputSchema, outputSchema: t.outputSchema,
+      annotations: t.annotations?.readOnlyHint === undefined && readRe?.test(t.name) ? { ...t.annotations, readOnlyHint: true } : t.annotations,
     }));
     const d = { tools, protocolVersion: (client as any).getNegotiatedProtocolVersion?.() ?? (client as any).protocolVersion, at: Date.now() };
     discovery.set(c.id, d);

@@ -1,4 +1,4 @@
-# agentgateway v1.6.0 — PRISM's governance layer in front of the Kubernetes MCP server.
+# agentgateway v1.6.0 — PRISM's governance layer in front of its curated MCP servers (k8s, event DB, GitHub, Stripe).
 # Reads are allow-listed. Every other tools/call needs an x-prism-approval JWT (ES256, signed by PRISM when a person
 # approves) whose `tool` matches the call and whose `argsBody` is exactly the request's "arguments" object.
 # A denied call returns HTTP 400 (JSON-RPC -32602 "Unknown tool") and is visible in the access log.
@@ -38,3 +38,87 @@ binds:
           - name: k8s
             mcp:
               host: http://host.docker.internal:7300/mcp
+    - name: event
+      matches:
+      - path:
+          pathPrefix: /event
+      policies:
+        jwtAuth:
+          mode: optional
+          issuer: prism
+          audiences: [agentgateway]
+          jwks:
+            file: /config/approval-jwks.json
+          location:
+            header:
+              name: x-prism-approval
+        mcpAuthorization:
+          rules:
+          - require: >-
+              mcp.methodName != "tools/call"
+              || mcp.tool.name.matches("^(event_overview|list_[a-z_]+|get_[a-z_]+)$")
+              || (jwt.tool == mcp.tool.name
+                  && string(request.body).contains(jwt.argsBody)
+                  && size(string(request.body).split("\"arguments\":")) == 2)
+      backends:
+      - mcp:
+          targets:
+          - name: event
+            mcp:
+              host: http://host.docker.internal:7101/mcp
+    - name: github
+      matches:
+      - path:
+          pathPrefix: /github
+      policies:
+        jwtAuth:
+          mode: optional
+          issuer: prism
+          audiences: [agentgateway]
+          jwks:
+            file: /config/approval-jwks.json
+          location:
+            header:
+              name: x-prism-approval
+        mcpAuthorization:
+          rules:
+          - require: >-
+              mcp.methodName != "tools/call"
+              || mcp.tool.name.matches("^((get|list|search)_[a-z_]+|[a-z_]+_read)$")
+              || (jwt.tool == mcp.tool.name
+                  && string(request.body).contains(jwt.argsBody)
+                  && size(string(request.body).split("\"arguments\":")) == 2)
+      backends:
+      - mcp:
+          targets:
+          - name: github
+            mcp:
+              host: https://api.githubcopilot.com/mcp/
+    - name: stripe
+      matches:
+      - path:
+          pathPrefix: /stripe
+      policies:
+        jwtAuth:
+          mode: optional
+          issuer: prism
+          audiences: [agentgateway]
+          jwks:
+            file: /config/approval-jwks.json
+          location:
+            header:
+              name: x-prism-approval
+        mcpAuthorization:
+          rules:
+          - require: >-
+              mcp.methodName != "tools/call"
+              || mcp.tool.name.matches("^(list|retrieve|search|get|fetch)_[a-z_]+$")
+              || (jwt.tool == mcp.tool.name
+                  && string(request.body).contains(jwt.argsBody)
+                  && size(string(request.body).split("\"arguments\":")) == 2)
+      backends:
+      - mcp:
+          targets:
+          - name: stripe
+            mcp:
+              host: https://mcp.stripe.com
