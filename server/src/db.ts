@@ -12,7 +12,7 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS docs_ws ON docs (kind, workspace_id);
 `);
 
-export type Kind = 'workspace' | 'connection' | 'incident' | 'decision' | 'playbook' | 'stats' | 'agent-transcript';
+export type Kind = 'workspace' | 'connection' | 'incident' | 'decision' | 'playbook' | 'stats' | 'agent-transcript' | 'research';
 
 const putStmt = db.prepare(
   `INSERT INTO docs (kind, id, workspace_id, json, updated_at) VALUES (?, ?, ?, ?, ?)

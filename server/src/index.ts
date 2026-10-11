@@ -13,6 +13,7 @@ import { investigate, onPanelRaw, resetWorkspace, setAutoInvestigate } from './i
 import { prismMcp } from './prism-mcp.ts';
 import { capture } from './telemetry.ts';
 import { searchRegistry } from './registry.ts';
+import { RESEARCH_CONNECTION, RESEARCH_TOOL } from './research.ts';
 import { addConnection, discover, listConnections, loadConnections, removeConnection, view } from './mcp.ts';
 import { getStats, latest, loadValidator, publicWorkspace, refreshPanel, scheduleAll, setRawListener } from './runtime.ts';
 import { Conflict, Invalid, applyOps, canEdit, canView, createWorkspace, deleteWorkspace, getWorkspace, listWorkspaces, saveWorkspace } from './workspaces.ts';
@@ -40,7 +41,11 @@ app.get('/api/connections', async c => {
   const user = userOf(c);
   const list = listConnections(user);
   await Promise.all(list.map(x => discover(x, user)));
-  return c.json(list.map(view));
+  const views = list.map(view);
+  // The built-in research source (Nimble Web Search Agent runs tracked by PRISM) appears when Nimble is connected.
+  if (views.some(v => v.id === 'nimble' && v.status === 'ok'))
+    views.push({ id: RESEARCH_CONNECTION, name: 'Research (Nimble agents)', url: 'built-in', status: 'ok', viaGateway: false, tools: [RESEARCH_TOOL] });
+  return c.json(views);
 });
 app.post('/api/connections', async c => {
   const body = await c.req.json();

@@ -19,6 +19,11 @@ if (process.env.SENTRY_DSN) {
       return /^(invoke_agent|approve decision|replay playbook)/.test(name) ? 1 : 0;
     },
     integrations: [Sentry.anthropicAIIntegration({ recordInputs: true, recordOutputs: true })],
+    // Expected client errors (bad ids, not the owner, stale versions, validation) are answered with 4xx; they aren't bugs.
+    beforeSend(event, hint) {
+      const name = (hint?.originalException as Error | undefined)?.constructor?.name;
+      return name && ['BadRequest', 'Forbidden', 'Conflict', 'Invalid'].includes(name) ? null : event;
+    },
   });
   console.log('Sentry on (AI agent monitoring + errors)');
 }

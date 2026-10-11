@@ -14,3 +14,5 @@ e2e/screenshots/
 
 # agentregistry CLI (downloaded by infra/registry/setup.sh)
 infra/registry/bin/
+e2e/shots-hd/
+web/.agents/

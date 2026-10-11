@@ -72,7 +72,7 @@ function build(user: string, agent: string) {
   }, async input => {
     const w = getWorkspace(input.workspaceId);
     if (!w || !canEdit(w, user)) return err('workspace not found or not yours');
-    const evidence = (input.evidencePanels ?? []).slice(0, 4).map((p: any, n) => ({ ...p, id: `ag-${Date.now().toString(36)}-${n}`, layout: { x: 0, y: n * 4, w: 12, h: 4 }, refreshSec: 5 })) as Panel[];
+    const evidence = (Array.isArray(input.evidencePanels) ? input.evidencePanels : []).slice(0, 4).map((p: any, n) => ({ ...p, id: `ag-${Date.now().toString(36)}-${n}`, layout: { x: 0, y: n * 4, w: 12, h: 4 }, refreshSec: 5 })) as Panel[];
     const problems: string[] = [];
     for (const p of evidence) problems.push(...(await validatePanel(p, w.owner)).problems);
     problems.push(...(await validateAction(input.proposedAction, w.owner)));

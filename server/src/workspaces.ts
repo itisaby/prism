@@ -26,7 +26,7 @@ export function deleteWorkspace(id: string, user: string) {
   if (!w) return false;
   if (!canEdit(w, user)) throw new Invalid(['only the owner can delete this workspace']);
   unschedule(id);
-  for (const kind of ['incident', 'decision', 'playbook', 'agent-transcript'] as const) store.deleteForWorkspace(kind, id);
+  for (const kind of ['incident', 'decision', 'playbook', 'agent-transcript', 'research'] as const) store.deleteForWorkspace(kind, id);
   store.delete('stats', id);
   store.delete('stats', `${id}:incidents`);
   store.delete('workspace', id);

@@ -7,6 +7,7 @@ import { activity, broadcast } from './bus.ts';
 import { AgentStopped, READ_TOOL, capabilitiesText, emptyReceipt, runReadTool, toolLoop } from './llm.ts';
 import { CATALOG_GUIDE, COMPOSER_SYSTEM } from './prompts.ts';
 import { addModelCost } from './runtime.ts';
+import { START_RESEARCH_DEF, startResearch } from './research.ts';
 import { Conflict, Invalid, applyOps, getWorkspace, saveWorkspace } from './workspaces.ts';
 
 const running = new Set<string>();
@@ -29,6 +30,16 @@ export async function compose(wsId: string, user: string, prompt: string): Promi
       prompt: `Request: ${prompt}\n\nCurrent workspace (version ${start.version}):\n${JSON.stringify(summarize(start))}`,
       tools: [
         { def: READ_TOOL, run: input => runReadTool(wsId, user, input) },
+        {
+          def: START_RESEARCH_DEF,
+          run: async input => {
+            try {
+              const r = await startResearch({ workspaceId: wsId, question: String(input.question ?? ''), effort: input.effort, requestedBy: 'Composer', user });
+              return { researchId: r.id, status: r.status, bind: { connectionId: 'research', tool: 'research_report', args: { researchId: r.id }, transform: '$' },
+                note: 'The run continues in the background; the panel shows progress, then the cited report. Use the Research component with data {"path":"/"}; panel refreshSec 10.' };
+            } catch (e) { return { error: (e as Error).message }; }
+          },
+        },
         {
           def: {
             name: 'propose_ops',

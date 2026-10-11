@@ -6,6 +6,7 @@ import { activity, broadcast } from './bus.ts';
 import { store } from './db.ts';
 import { callTool, getConnection, isWriteTool, toolInfo, discover } from './mcp.ts';
 import { metric } from './telemetry.ts';
+import { RESEARCH_CONNECTION, RESEARCH_TOOL, researchReport } from './research.ts';
 
 // ---------------------------------------------------------------- A2UI validation (shared with the browser catalog)
 type Validator = (components: unknown[], data: unknown) => string[];
@@ -42,7 +43,9 @@ export async function evaluate(expr: string, input: unknown, timeoutMs = 2000): 
 }
 
 export async function runBinding(b: Binding, user: string) {
-  const raw = await callTool(b.connectionId, b.tool, b.args ?? {}, { user });
+  const raw = b.connectionId === RESEARCH_CONNECTION
+    ? researchReport(b.args ?? {}) // built-in source: PRISM's own copy of a research run, no external call
+    : await callTool(b.connectionId, b.tool, b.args ?? {}, { user });
   let data: unknown;
   try { data = await evaluate(b.transform || '$', raw); }
   catch (e) { throw new Error(`JSONata error in transform: ${(e as any).message ?? e}`); }
@@ -55,12 +58,16 @@ export async function validatePanel(p: Panel, user: string): Promise<{ problems:
   if (!p.id || !p.title) problems.push('panel needs id and title');
   if (!Array.isArray(p.components)) return { problems: [...problems, `panel ${p.id}: "components" must be the A2UI component list (an array with one id "root")`] };
   if (!p.components.some(c => c?.id === 'root')) problems.push(`panel ${p.id}: one component must have id "root"`);
-  const conn = getConnection(p.binding?.connectionId, user);
-  if (!conn) return { problems: [...problems, `panel ${p.id}: unknown connectionId "${p.binding?.connectionId}"`] };
-  await discover(conn, user);
-  const tool = toolInfo(conn.id, p.binding.tool);
-  if (!tool) return { problems: [...problems, `panel ${p.id}: tool "${p.binding.tool}" does not exist on ${conn.name}`] };
-  if (isWriteTool(tool)) return { problems: [...problems, `panel ${p.id}: "${p.binding.tool}" is a write tool; panels may only bind read-only tools`] };
+  if (p.binding?.connectionId === RESEARCH_CONNECTION) {
+    if (p.binding.tool !== RESEARCH_TOOL.name) return { problems: [...problems, `panel ${p.id}: the research source only has the tool "${RESEARCH_TOOL.name}"`] };
+  } else {
+    const conn = getConnection(p.binding?.connectionId, user);
+    if (!conn) return { problems: [...problems, `panel ${p.id}: unknown connectionId "${p.binding?.connectionId}"`] };
+    await discover(conn, user);
+    const tool = toolInfo(conn.id, p.binding.tool);
+    if (!tool) return { problems: [...problems, `panel ${p.id}: tool "${p.binding.tool}" does not exist on ${conn.name}`] };
+    if (isWriteTool(tool)) return { problems: [...problems, `panel ${p.id}: "${p.binding.tool}" is a write tool; panels may only bind read-only tools`] };
+  }
   for (const a of p.actions ?? []) {
     const t = toolInfo(a.connectionId, a.tool);
     if (!t) problems.push(`panel ${p.id}: action "${a.id}" uses unknown tool "${a.tool}"`);

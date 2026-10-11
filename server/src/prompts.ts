@@ -15,6 +15,7 @@ PRISM components (props are strict; unknown props are rejected):
 - DataTable  {title?, rows: {"path":"/rows"}, columns:[{key,label}], toneKey?}
 - CardList   {title?, items: {"path":"/items"}, titleKey, subtitleKey?, badgeKey?, toneKey?}
 - TimeSeries {title?, data: {"path":"/series"}, x:"time", series:[{key,label?}], kind?:"line"|"bar"|"stacked-bar"}
+- Research   {title?, data: {"path":"/"}}   only for the built-in "research" source (research_report); shows live progress, then the cited report
 tone values: "ok" | "warn" | "bad". Compute tones in the transform (e.g. reason = "Running" ? "ok" : "bad").
 Never write the "recordActions" prop: PRISM injects it from the panel's actions.
 

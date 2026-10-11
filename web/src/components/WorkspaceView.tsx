@@ -99,6 +99,17 @@ export function WorkspaceView({ id }: { id: string }) {
     }, 350);
   }, [workspace, id, applyMessage, reload, toast]);
 
+  // ---- rename (owner): a rename_workspace op, atomic and versioned like every other edit
+  const rename = useCallback(async (title: string) => {
+    try {
+      const ws = await api<Workspace>(`/workspaces/${id}/ops`, { body: { baseVersion: baseVersion.current, ops: [{ op: 'rename_workspace', title }] } });
+      applyMessage({ type: 'workspace', workspace: ws });
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 409) void reload();
+      toast({ text: `Couldn't rename: ${(e as Error).message}`, tone: 'bad' });
+    }
+  }, [id, applyMessage, reload, toast]);
+
   const openIncidents = incidents.filter(i => i.status !== 'resolved');
   const firingByPanel = useMemo(() => {
     const out: Record<string, string> = {};
@@ -116,13 +127,15 @@ export function WorkspaceView({ id }: { id: string }) {
   return (
     <div className="app">
       <Decor variant="app" />
-      <Rail mode={mode} activeId={id} user={user} playbooks={playbooks} open={railOpen} onClose={() => setRailOpen(false)}
+      <Rail mode={mode} activeId={id} activeTitle={workspace?.title} user={user} playbooks={playbooks} open={railOpen} onClose={() => setRailOpen(false)}
         onConnected={c => { setConnKey(k => k + 1); toast({ text: `Connected ${c.name} · ${c.tools.length} tools`, tone: 'ok' }); }} />
       <main className="main">
         <header className="topbar">
           <button className="icon-btn only-mobile" onClick={() => setRailOpen(true)} aria-label="Menu"><Icon name="menu" /></button>
           <span className="mono crumb hide-mobile">Workspaces /</span>
-          <h1 className="ws-title ellipsis">{workspace?.title ?? (error ? 'Workspace' : 'Loading…')}</h1>
+          {workspace && workspace.owner === user
+            ? <EditableTitle title={workspace.title} onSave={rename} />
+            : <h1 className="ws-title ellipsis">{workspace?.title ?? (error ? 'Workspace' : 'Loading…')}</h1>}
           <LiveDot mode={composing ? 'connecting' : mode} />
           <span className="spacer" />
           <ReceiptChip workspace={workspace} refreshes={stats?.refreshes ?? 0} />
@@ -302,5 +315,28 @@ function Inspector({ activity, stats, onClose }: { activity: Activity[]; stats?:
         ))}
       </div>
     </aside>
+  );
+}
+
+/** Click to rename; Enter saves, Escape cancels. */
+function EditableTitle({ title, onSave }: { title: string; onSave: (t: string) => Promise<void> }) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(title);
+  useEffect(() => { if (!editing) setValue(title); }, [title, editing]);
+  const commit = async () => {
+    const t = value.trim().slice(0, 80);
+    setEditing(false);
+    if (t && t !== title) await onSave(t);
+  };
+  if (!editing)
+    return (
+      <button className="ws-title ws-title-edit ellipsis" title="Rename workspace" onClick={() => setEditing(true)}>
+        {title}<Icon name="pencil" size={13} />
+      </button>
+    );
+  return (
+    <input className="ws-title-input" value={value} autoFocus aria-label="Workspace name" maxLength={80}
+      onChange={e => setValue(e.target.value)} onBlur={() => void commit()}
+      onKeyDown={e => { if (e.key === 'Enter') void commit(); if (e.key === 'Escape') { setValue(title); setEditing(false); } }} />
   );
 }

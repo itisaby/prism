@@ -5,7 +5,7 @@ import { Catalog } from '@a2ui/web_core/v0_9';
 import { basicCatalog } from '@a2ui/web_core/v0_9/basic_catalog';
 import { useState, type ReactNode } from 'react';
 import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { CardListApi, DataTableApi, MetricRowApi, PRISM_CATALOG_ID, StatusListApi, TimeSeriesApi } from './apis.ts';
+import { CardListApi, DataTableApi, MetricRowApi, PRISM_CATALOG_ID, ResearchApi, StatusListApi, TimeSeriesApi } from './apis.ts';
 
 type Rec = Record<string, unknown>;
 type Tone = 'ok' | 'warn' | 'bad';
@@ -279,7 +279,84 @@ const StatusList = createComponentImplementation(StatusListApi, ({ props, contex
   );
 });
 
-export const PRISM_REACT_COMPONENTS: ReactCatalogComponent[] = [MetricRow, TimeSeries, DataTable, CardList, StatusList];
+// ---------------------------------------------------------------- Research (Nimble Web Search Agent run, tracked by PRISM)
+type Src = { title?: string; url?: string; type?: string };
+
+// Tiny markdown: headings (#, ##, ###), bullet and numbered lists, paragraphs, bold, inline code, and [n] citations linked to sources.
+function inline(t: string, sources: Src[], key: string): ReactNode[] {
+  return t.split(/(\*\*[^*]+\*\*|`[^`]+`|\[\d+\])/g).filter(Boolean).map((part, i) => {
+    const k = `${key}-${i}`;
+    if (part.startsWith('**')) return <b key={k}>{part.slice(2, -2)}</b>;
+    if (part.startsWith('`')) return <code key={k}>{part.slice(1, -1)}</code>;
+    const m = part.match(/^\[(\d+)\]$/);
+    if (m) { const s = sources[Number(m[1]) - 1]; return s?.url ? <a key={k} className="rs-cite" href={s.url} target="_blank" rel="noreferrer">{m[1]}</a> : <sup key={k}>{m[1]}</sup>; }
+    return <span key={k}>{part}</span>;
+  });
+}
+function Markdown({ text: md, sources }: { text: string; sources: Src[] }) {
+  const out: ReactNode[] = [];
+  let list: { ordered: boolean; items: string[] } | null = null;
+  const flush = () => { if (list) { const L = list.ordered ? 'ol' : 'ul'; out.push(<L key={`l${out.length}`}>{list.items.map((it, i) => <li key={i}>{inline(it, sources, `li${out.length}-${i}`)}</li>)}</L>); list = null; } };
+  md.split('\n').forEach((raw, n) => {
+    const line = raw.trimEnd();
+    const h = line.match(/^(#{1,3})\s+(.*)$/);
+    const li = line.match(/^\s*(?:[-*]|(\d+)\.)\s+(.*)$/);
+    if (h) { flush(); const H = (['h3', 'h4', 'h5'] as const)[h[1].length - 1]; out.push(<H key={n}>{inline(h[2], sources, `h${n}`)}</H>); }
+    else if (li) { const ordered = !!li[1]; if (!list || list.ordered !== ordered) { flush(); list = { ordered, items: [] }; } list.items.push(li[2]); }
+    else if (!line.trim()) flush();
+    else { flush(); out.push(<p key={n}>{inline(line, sources, `p${n}`)}</p>); }
+  });
+  flush();
+  return <div className="rs-md">{out}</div>;
+}
+
+const Research = createComponentImplementation(ResearchApi, ({ props }) => {
+  const d = (props.data && typeof props.data === 'object' ? props.data : {}) as Rec;
+  const status = text(d.status) || 'queued';
+  const counts = (d.counts ?? {}) as Rec;
+  const sources = asRows(d.sources) as Src[];
+  const [showAll, setShowAll] = useState(false);
+  const done = status === 'completed';
+  return (
+    <div className="pc-block rs">
+      <Heading>{props.title}</Heading>
+      <div className="rs-head">
+        <span className={`pc-badge ${done ? 't-ok' : status === 'failed' ? 't-bad' : 't-warn'}`}>{done ? 'Researched' : status === 'failed' ? 'Failed' : status === 'running' ? 'Researching…' : 'Queued'}</span>
+        <span className="rs-q">{text(d.question)}</span>
+      </div>
+      <div className="rs-meta mono">
+        <span>Nimble Web Search Agent</span><span>effort {text(d.effort)}</span><span>{text(d.elapsedSec)} s</span>
+        {d.requestedBy ? <span>started by {text(d.requestedBy)}</span> : null}
+      </div>
+      {!done && status !== 'failed' && <div className="rs-progress"><span className="spinner" />The agent is searching, reading and cross-checking sources. This panel updates by itself, with no model calls.</div>}
+      {status === 'failed' && <div className="pc-empty">{text(d.error)}</div>}
+      {done && (
+        <>
+          <div className="rs-stats">
+            <div><b>{text(counts.claims)}</b><span>claims</span></div>
+            <div><b>{text(counts.sources)}</b><span>sources</span></div>
+            <div><b>{text(counts.primary)}</b><span>primary</span></div>
+            <div><b>{text(counts.secondary)}</b><span>secondary</span></div>
+            <div><b className={`rs-conf c-${text(d.confidence)}`}>{text(d.confidence) || 'n/a'}</b><span>confidence</span></div>
+          </div>
+          <Markdown text={text(d.report)} sources={sources} />
+          <div className="rs-sources">
+            <div className="rs-sources-h">Sources</div>
+            {(showAll ? sources : sources.slice(0, 6)).map((s, i) => (
+              <a key={i} href={s.url} target="_blank" rel="noreferrer" className="rs-src">
+                <span className="rs-n mono">{i + 1}</span><span className="ellipsis">{s.title ?? s.url}</span>
+                <span className={`pc-badge ${s.type === 'primary' ? 't-ok' : ''}`}>{s.type}</span>
+              </a>
+            ))}
+            {sources.length > 6 && <button className="rs-more" onClick={() => setShowAll(v => !v)}>{showAll ? 'Show fewer' : `Show all ${sources.length}`}</button>}
+          </div>
+        </>
+      )}
+    </div>
+  );
+});
+
+export const PRISM_REACT_COMPONENTS: ReactCatalogComponent[] = [MetricRow, TimeSeries, DataTable, CardList, StatusList, Research];
 
 /** Browser catalog: A2UI basic components (web components) + PRISM React components. */
 export function browserCatalog(): Catalog<ReactCatalogComponent> {

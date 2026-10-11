@@ -9,6 +9,7 @@ import { CATALOG_GUIDE, INVESTIGATOR_SYSTEM } from './prompts.ts';
 import { addModelCost, evaluate, resetStats, validatePanel } from './runtime.ts';
 import { getWorkspace } from './workspaces.ts';
 import { capture, metric, span } from './telemetry.ts';
+import { START_RESEARCH_DEF, startResearch } from './research.ts';
 
 export let autoInvestigate = true;
 const clearCounts = new Map<string, number>(); // incident id → consecutive healthy evaluations
@@ -196,6 +197,7 @@ export async function investigate(incidentId: string, correction?: Correction): 
   try {
     const caps = await capabilitiesText(user);
     let proposals = 0;
+    let researched = false;
     await toolLoop({
       wsId: w.id, user, label: 'Investigator', receipt, maxTurns: 10, transcript,
       system: INVESTIGATOR_SYSTEM,
@@ -207,6 +209,18 @@ export async function investigate(incidentId: string, correction?: Correction): 
         JSON.stringify(w.panels.map(p => ({ id: p.id, title: p.title, binding: p.binding }))),
       tools: [
         { def: READ_TOOL, run: input => runReadTool(w.id, user, input) },
+        {
+          // Live web research as decision evidence: at most one run per investigation; don't wait for it.
+          def: { ...START_RESEARCH_DEF, description: START_RESEARCH_DEF.description + ' At most once per incident, and only if outside knowledge would help the person decide. Do not wait for it: add its panel to evidencePanels and propose right away.' },
+          run: async input => {
+            if (researched) return { error: 'Research already started for this incident.' };
+            researched = true;
+            try {
+              const r = await startResearch({ workspaceId: w.id, question: String(input.question ?? ''), effort: input.effort ?? 'low', requestedBy: 'Investigator', user });
+              return { researchId: r.id, bind: { connectionId: 'research', tool: 'research_report', args: { researchId: r.id }, transform: '$' } };
+            } catch (e) { return { error: (e as Error).message }; }
+          },
+        },
         {
           def: {
             name: 'propose_decision',
@@ -230,7 +244,12 @@ export async function investigate(incidentId: string, correction?: Correction): 
           run: async input => {
             proposals++;
             const problems: string[] = [];
-            const evidence: Panel[] = (input.evidencePanels ?? []).slice(0, 4).map((p: any, n: number) => ({
+            // Models sometimes send evidencePanels as an object or a JSON string; accept those, reject anything else clearly
+            // (Sentry JAVASCRIPT-NEXTJS-1: a non-array crashed the investigation).
+            const rawEvidence = typeof input.evidencePanels === 'string' ? safeJson(input.evidencePanels) : input.evidencePanels;
+            const evidenceList = Array.isArray(rawEvidence) ? rawEvidence : rawEvidence && typeof rawEvidence === 'object' ? Object.values(rawEvidence) : [];
+            if (!Array.isArray(rawEvidence) && rawEvidence !== undefined && !evidenceList.length) problems.push('evidencePanels must be an array of panels');
+            const evidence: Panel[] = evidenceList.slice(0, 4).map((p: any, n: number) => ({
               ...p, id: `ev-${i.number}-${rev}${n + 1}`, layout: { x: 0, y: n * 4, w: 12, h: 4 }, refreshSec: Math.max(5, p.refreshSec || 5),
               binding: { ...p.binding, args: p.binding?.args ?? {}, transform: p.binding?.transform || '$' },
             }));
@@ -321,3 +340,5 @@ export function resetWorkspace(wsId: string, keepPlaybooks: boolean) {
 }
 
 export const setAutoInvestigate = (on: boolean) => { autoInvestigate = on; };
+
+function safeJson(s: string): unknown { try { return JSON.parse(s); } catch { return undefined; } }

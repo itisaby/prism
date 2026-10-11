@@ -11,8 +11,8 @@ import type { ConnectionView, Playbook } from '../lib/types.ts';
 
 interface RegistryEntry { name: string; title?: string; description?: string; url: string; tools?: number }
 
-export function Rail({ activeId, user, playbooks, open, onClose, onConnected, mode }: {
-  mode?: string; activeId?: string; user: string; playbooks: Playbook[]; open?: boolean; onClose?: () => void; onConnected?: (c: ConnectionView) => void;
+export function Rail({ activeId, activeTitle, user, playbooks, open, onClose, onConnected, mode }: {
+  mode?: string; activeId?: string; activeTitle?: string; user: string; playbooks: Playbook[]; open?: boolean; onClose?: () => void; onConnected?: (c: ConnectionView) => void;
 }) {
   const [workspaces, setWorkspaces] = useState<{ id: string; title: string; owner: string }[]>([]);
   const [connections, setConnections] = useState<ConnectionView[]>([]);
@@ -59,7 +59,7 @@ export function Rail({ activeId, user, playbooks, open, onClose, onConnected, mo
             <div key={w.id} className="rail-ws">
               <Link href={`/w/${w.id}${q}`} className={`rail-item ${w.id === activeId ? 'on' : ''}`}>
                 <Icon name="layers" size={15} />
-                <span className="ellipsis">{w.title}</span>
+                <span className="ellipsis">{w.id === activeId && activeTitle ? activeTitle : w.title}</span>
                 {w.owner !== user && <span className="mono rail-meta">shared</span>}
               </Link>
               {w.owner === user && (

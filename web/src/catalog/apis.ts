@@ -94,8 +94,19 @@ export const StatusListApi = {
     .strict(),
 } satisfies ComponentApi;
 
+export const ResearchApi = {
+  name: 'Research',
+  schema: z
+    .object({
+      title,
+      data: CommonSchemas.DynamicValue.describe('A research_report object, usually {"path":"/"}: status, question, effort, elapsedSec, confidence, report (markdown), claims, sources, counts'),
+      weight,
+    })
+    .strict(),
+} satisfies ComponentApi;
+
 export const TONES = tone.options;
-export const PRISM_APIS: ComponentApi[] = [MetricRowApi, TimeSeriesApi, DataTableApi, CardListApi, StatusListApi];
+export const PRISM_APIS: ComponentApi[] = [MetricRowApi, TimeSeriesApi, DataTableApi, CardListApi, StatusListApi, ResearchApi];
 export const PRISM_COMPONENT_NAMES = PRISM_APIS.map(a => a.name);
 
 /** Schema-only catalog (A2UI basic components + PRISM components) for headless validation and prompts. */

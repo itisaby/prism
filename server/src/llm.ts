@@ -4,7 +4,7 @@ import type { Receipt } from '../../shared/types.ts';
 import { activity } from './bus.ts';
 import { config } from './config.ts';
 import { callTool, discover, getConnection, isWriteTool, listConnections } from './mcp.ts';
-import { agentSpan, metric, toolSpan } from './telemetry.ts';
+import { agentSpan, capture, metric, toolSpan } from './telemetry.ts';
 
 const client = config.llmGatewayUrl
   ? new Anthropic({ baseURL: config.llmGatewayUrl, apiKey: 'held-by-agentgateway' })
@@ -33,6 +33,11 @@ export async function capabilitiesText(user: string) {
       parts.push(`- ${t.name} [${isWriteTool(t) ? 'WRITE — never bind in panels; only via actions/decisions that a person approves' : 'read'}]: ` +
         `${(t.description ?? '').slice(0, 300).replace(/\s+/g, ' ')}\n  input: ${JSON.stringify(t.inputSchema)}`);
   }
+  if (listConnections(user).some(c => c.id === 'nimble'))
+    parts.push(`## connection "research" (PRISM built-in: Nimble Web Search Agent runs started with start_research)\n` +
+      `- research_report [read]: live status + cited result of a research run\n  input: {"researchId": string}\n` +
+      `  returns {status: queued|running|completed|failed, question, effort, elapsedSec, confidence, confidenceReason, report (markdown), ` +
+      `claims: [{n, confidence, reasoning, citations}], sources: [{title, url, type: primary|secondary}], counts: {claims, sources, primary, secondary}}`);
   return parts.join('\n') || '(no connections)';
 }
 
@@ -68,6 +73,30 @@ export interface LoopTool {
 }
 
 export class AgentStopped extends Error {}
+
+/**
+ * Check a model's tool call against the tool's input_schema before running it (Seer's root cause for
+ * JAVASCRIPT-NEXTJS-1: the schema only guides the model; nothing enforced it). Fixes the common slip of
+ * JSON-encoding an array/object, and returns problems for the model to correct instead of letting the tool throw.
+ */
+export function coerceToolInput(schema: any, input: unknown): { input: Record<string, unknown>; problems: string[] } {
+  const problems: string[] = [];
+  const obj: Record<string, unknown> = input && typeof input === 'object' && !Array.isArray(input) ? { ...(input as object) } : {};
+  if (!input || typeof input !== 'object' || Array.isArray(input)) problems.push('tool input must be a JSON object');
+  const props = schema?.properties ?? {};
+  for (const key of schema?.required ?? []) if (obj[key] === undefined) problems.push(`missing required field "${key}"`);
+  for (const [key, spec] of Object.entries<any>(props)) {
+    const v = obj[key];
+    if (v === undefined || !spec?.type) continue;
+    if ((spec.type === 'array' || spec.type === 'object') && typeof v === 'string') {
+      try { obj[key] = JSON.parse(v); } catch { /* reported below */ }
+    }
+    const got = Array.isArray(obj[key]) ? 'array' : obj[key] === null ? 'null' : typeof obj[key];
+    const want = spec.type === 'integer' ? 'number' : spec.type;
+    if (typeof want === 'string' && got !== want) problems.push(`field "${key}" must be ${spec.type}, got ${got}`);
+  }
+  return { input: obj, problems };
+}
 
 type LoopOpts = {
   wsId: string; user: string; label: string; system: string; stablePrefix: string; prompt: string;
@@ -120,7 +149,14 @@ async function runLoop(opts: LoopOpts): Promise<unknown> {
       let finished: unknown;
       for (const u of uses) {
         const tool = byName.get(u.name);
-        const out = tool ? await tool.run(u.input) : { error: `unknown tool ${u.name}` };
+        let out: unknown;
+        const checked = tool ? coerceToolInput(tool.def.input_schema, u.input) : undefined;
+        try {
+          out = !tool ? { error: `unknown tool ${u.name}` }
+            : checked!.problems.length ? { error: `Invalid input for ${u.name}: ${checked!.problems.join('; ')}. Fix the input and call it again.` }
+            : await tool.run(checked!.input);
+        }
+        catch (e) { capture(e, { tool: u.name, agent: opts.label }); out = { error: `PRISM could not run ${u.name}: ${(e as Error).message}` }; }
         if (out && typeof out === 'object' && 'done' in (out as any)) { finished = out; results.push({ type: 'tool_result', tool_use_id: u.id, content: 'accepted' }); continue; }
         const isErr = !!(out && typeof out === 'object' && 'error' in (out as any));
         results.push({ type: 'tool_result', tool_use_id: u.id, content: typeof out === 'string' ? out : JSON.stringify(out), ...(isErr ? { is_error: true } : {}) });
