@@ -28,6 +28,14 @@ export function Rail({ activeId, activeTitle, user, playbooks, open, onClose, on
     loadConnections(true).then(setConnections);
   }, []);
   useEffect(() => { load(); }, [load, mode]);
+  // Keep the workspace list fresh: new workspaces can come from another tab, the landing page, or an agent via PRISM MCP.
+  useEffect(() => {
+    if (mode === 'fixture') return;
+    const refresh = () => { api<{ id: string; title: string; owner: string }[]>('/workspaces').then(setWorkspaces).catch(() => {}); };
+    const t = setInterval(refresh, 8000);
+    window.addEventListener('focus', refresh);
+    return () => { clearInterval(t); window.removeEventListener('focus', refresh); };
+  }, [mode]);
 
   const confirmDelete = async () => {
     if (!deleting) return;

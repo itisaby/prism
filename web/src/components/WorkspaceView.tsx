@@ -111,6 +111,16 @@ export function WorkspaceView({ id }: { id: string }) {
   }, [id, applyMessage, reload, toast]);
 
   const openIncidents = incidents.filter(i => i.status !== 'resolved');
+  const investigate = useCallback(async (incidentId: string) => {
+    try {
+      toast({ text: 'Waking the investigate agent…', sub: 'It reads the systems, then sends you a decision. Usually 15–30 s.', tone: 'ok' }, 5000);
+      const r = await api<{ status?: string; message?: string; title?: string }>(`/incidents/${incidentId}/investigate`, { method: 'POST' });
+      if (r.title) toast({ text: `Decision ready: ${r.title}`, tone: 'ok' }, 8000);
+      else if (r.message) toast({ text: r.message, tone: r.status === 'no-decision' ? 'bad' : 'ok' }, 7000);
+    } catch (e) {
+      toast({ text: (e as Error).message, tone: 'bad' });
+    }
+  }, [toast]);
   const firingByPanel = useMemo(() => {
     const out: Record<string, string> = {};
     for (const inc of openIncidents) {
@@ -145,7 +155,7 @@ export function WorkspaceView({ id }: { id: string }) {
           <button className="btn btn-primary btn-sm" onClick={() => setShare(true)}><Icon name="share" size={14} />Share</button>
         </header>
 
-        {openIncidents.map(inc => <IncidentBanner key={inc.id} incident={inc} decision={decisions.find(d => d.id === inc.decisionId)} q={q} />)}
+        {openIncidents.length > 0 && <IncidentStack incidents={openIncidents} decisions={decisions} q={q} onInvestigate={investigate} />}
         {pending.filter(d => !d.incidentId).map(d => (
           <Link key={d.id} href={`/decide/${d.id}${q}`} className="banner banner-accent">
             <Icon name="key" size={15} /><b>Approval needed</b><span className="ellipsis">{d.title}</span><span className="spacer" /><span className="banner-cta">Review<Icon name="arrow-right" size={14} /></span>
@@ -220,30 +230,69 @@ function ReceiptChip({ workspace, refreshes }: { workspace?: Workspace; refreshe
   );
 }
 
-function IncidentBanner({ incident, decision, q }: { incident: Incident; decision?: Decision; q: string }) {
+const STATUS_RANK: Record<string, number> = { 'awaiting-approval': 0, resolving: 1, investigating: 2, open: 3 };
+
+/** One banner for the most urgent incident; the rest fold into a compact, expandable row so the dashboard stays visible. */
+function IncidentStack({ incidents, decisions, q, onInvestigate }: {
+  incidents: Incident[]; decisions: Decision[]; q: string; onInvestigate: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const sorted = [...incidents].sort((a, b) => (STATUS_RANK[a.status] ?? 9) - (STATUS_RANK[b.status] ?? 9) || b.number - a.number);
+  const [top, ...rest] = sorted;
+  const byReason = rest.reduce<Record<string, number>>((m, i) => ({ ...m, [i.reason]: (m[i.reason] ?? 0) + 1 }), {});
+  const find = (i: Incident) => decisions.find(d => d.id === i.decisionId);
+  return (
+    <div className="incident-stack">
+      <IncidentBanner incident={top} decision={find(top)} q={q} onInvestigate={onInvestigate} />
+      {rest.length > 0 && (
+        <button className="incident-more" onClick={() => setOpen(v => !v)} aria-expanded={open}>
+          <span className="pulse pulse-danger" />
+          <b>+{rest.length} more incident{rest.length === 1 ? '' : 's'}</b>
+          <span className="muted ellipsis">{Object.entries(byReason).map(([r, n]) => `${n} ${r}`).join(' · ')}</span>
+          <span className="spacer" />
+          <span className="banner-cta muted">{open ? 'Hide' : 'Show all'}<Icon name={open ? 'chevron-up' : 'chevron-down'} size={14} /></span>
+        </button>
+      )}
+      {open && rest.length > 0 && (
+        <div className="incident-list">
+          {rest.map(inc => <IncidentBanner key={inc.id} incident={inc} decision={find(inc)} q={q} onInvestigate={onInvestigate} compact />)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function IncidentBanner({ incident, decision, q, onInvestigate, compact }: {
+  incident: Incident; decision?: Decision; q: string; onInvestigate: (id: string) => void; compact?: boolean;
+}) {
   const waiting = incident.status === 'awaiting-approval' || decision?.status === 'pending';
   const resolving = incident.status === 'resolving' || decision?.status === 'approved';
-  const state = waiting ? 'Decision waiting' : resolving ? 'Fix running…' : decision?.source === 'playbook' ? 'Replaying playbook…' : 'Agent investigating…';
+  const investigating = incident.status === 'investigating';
+  const idle = !waiting && !resolving && !investigating && !decision; // open, no agent run (e.g. cooldown): a person can start one
+  const state = waiting ? 'Decision waiting' : resolving ? 'Fix running…' : decision?.source === 'playbook' ? 'Replaying playbook…' : investigating ? 'Agent investigating…' : '';
   const body = (
     <>
       <span className="pulse pulse-danger" />
       <b>Incident #{incident.number}</b>
-      <span className="mono hide-mobile">{incident.resource}</span>
+      <span className="mono hide-mobile ellipsis">{incident.resource}</span>
       <span className="banner-reason">{incident.reason}</span>
       <span className="spacer" />
       {decision?.source === 'playbook' && <Badge tone="success" icon="repeat">0 model calls</Badge>}
-      <span className={`banner-cta ${waiting ? '' : 'muted'}`}>
-        {!waiting && <span className="spinner" />}
-        {state}
-        {waiting && <Icon name="arrow-right" size={14} />}
-      </span>
+      {idle ? (
+        <button className="btn btn-ghost btn-sm banner-btn" onClick={e => { e.preventDefault(); onInvestigate(incident.id); }}>
+          <Icon name="sparkles" size={13} />Investigate
+        </button>
+      ) : (
+        <span className={`banner-cta ${waiting ? '' : 'muted'}`}>
+          {!waiting && <span className="spinner" />}
+          {state}
+          {waiting && <Icon name="arrow-right" size={14} />}
+        </span>
+      )}
     </>
   );
-  return waiting && incident.decisionId ? (
-    <Link href={`/decide/${incident.decisionId}${q}`} className="banner banner-danger">{body}</Link>
-  ) : (
-    <div className="banner banner-danger">{body}</div>
-  );
+  const cls = `banner banner-danger ${compact ? 'banner-compact' : ''}`;
+  return waiting && incident.decisionId ? <Link href={`/decide/${incident.decisionId}${q}`} className={cls}>{body}</Link> : <div className={cls}>{body}</div>;
 }
 
 function ChatBar({ busy, onSend }: { busy: boolean; onSend: (p: string) => void }) {

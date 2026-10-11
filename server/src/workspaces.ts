@@ -17,8 +17,9 @@ export function createWorkspace(owner: string, title = 'Untitled workspace'): Wo
 export const getWorkspace = (id: string) => store.get<Workspace>('workspace', id);
 export const canView = (w: Workspace, user: string) => w.owner === user || w.members.includes(user) || user === 'judge';
 export const canEdit = (w: Workspace, user: string) => w.owner === user;
+// Most recently active first (the store lists by last update, oldest first).
 export const listWorkspaces = (user: string) =>
-  store.list<Workspace>('workspace').filter(w => canView(w, user)).map(w => ({ id: w.id, title: w.title, owner: w.owner }));
+  store.list<Workspace>('workspace').reverse().filter(w => canView(w, user)).map(w => ({ id: w.id, title: w.title, owner: w.owner }));
 
 /** Delete a workspace and everything it owns. Connections are per user, not per workspace, so they stay. */
 export function deleteWorkspace(id: string, user: string) {

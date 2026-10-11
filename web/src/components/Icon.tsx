@@ -33,6 +33,7 @@ const P: Record<string, string> = {
   trash: 'M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6',
   'chevron-right': 'M9 6l6 6-6 6',
   'chevron-down': 'M6 9l6 6 6-6',
+  'chevron-up': 'M18 15l-6-6-6 6',
   'chevron-left': 'M15 6l-6 6 6 6',
   copy: 'M9 9h11v11H9zM5 15H4V4h11v1',
   link: 'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1',

@@ -122,8 +122,10 @@ app.post('/api/workspaces/:id/panels/:pid/actions', async c => {
 app.post('/api/incidents/:id/investigate', async c => {
   const i = store.get<Incident>('incident', c.req.param('id'));
   if (!i) throw new BadRequest('unknown incident');
+  if (i.status === 'investigating') return c.json({ status: 'investigating', message: 'The agent is already investigating this incident.' });
+  if (i.status === 'resolved') return c.json({ status: 'resolved', message: 'This incident already cleared.' });
   const d = await investigate(i.id);
-  return c.json(d ?? { error: 'No decision was produced; see the Inspector.' });
+  return c.json(d ?? { status: 'no-decision', message: 'The agent finished without proposing a fix; see the Inspector for what it found.' });
 });
 app.get('/api/decisions/:id', c => {
   const d = getDecision(c.req.param('id'));
@@ -172,6 +174,8 @@ app.get('/api/registry', async c => {
 process.on('unhandledRejection', e => { console.error('unhandled rejection (kept running):', e); capture(e); });
 process.on('uncaughtException', e => { console.error('uncaught exception (kept running):', e); capture(e); });
 await initApprovalKeys();
+// An investigation can't survive a restart (no process holds it); put those incidents back to "open" so a person can re-run it.
+for (const i of store.list<Incident>('incident')) if (i.status === 'investigating') store.put('incident', { ...i, status: 'open' }, i.workspaceId);
 await loadValidator();
 loadConnections();
 setRawListener((w, p, raw) => { void onPanelRaw(w, p, raw); });
