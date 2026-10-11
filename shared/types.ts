@@ -150,6 +150,9 @@ export interface Decision {
   result?: { ok: boolean; text: string; gateway?: string };
   receipt: Receipt;
   matchMs?: number;       // playbook replay: time to instantiate
+  revisionOf?: string;    // the decision a person sent back, which this one replaces
+  supersededBy?: string;  // set on a sent-back decision once the agent's revision exists
+  correction?: { by: User; note: string }; // the person's instruction this revision follows
 }
 
 export interface Playbook {
@@ -160,7 +163,8 @@ export interface Playbook {
   evidenceTemplate: Panel[];
   actionTemplate: ProposedAction;
   rationale: string;
-  origin: { incidentId: string; incidentNumber: number; savedBy: User; approvedBy?: User; at: string; receipt: Receipt };
+  origin: { incidentId: string; incidentNumber: number; savedBy: User; approvedBy?: User; at: string; receipt: Receipt;
+    correction?: { by: User; note: string } }; // set when the fix came from a person's correction, not the agent's first idea
   uses: number;
 }
 

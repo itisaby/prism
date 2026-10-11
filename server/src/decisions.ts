@@ -204,17 +204,19 @@ export function savePlaybook(decisionId: string, user: string): Playbook {
   const incident = store.get<Incident>('incident', d.incidentId)!;
   const existing = store.list<Playbook>('playbook', w.id).find(p =>
     p.match.watcherId === incident.watcherId && p.match.resource === incident.resource && p.match.reason === incident.reason);
-  if (existing) return existing;
+  if (existing && !d.correction) return existing;
   const pb: Playbook = {
-    id: `pb-${randomUUID().slice(0, 6)}`, workspaceId: w.id, title: d.title,
+    ...(existing ? { id: existing.id, uses: existing.uses } : {}),
+    id: existing?.id ?? `pb-${randomUUID().slice(0, 6)}`, workspaceId: w.id, title: d.title,
     match: { watcherId: incident.watcherId, resource: incident.resource, reason: incident.reason },
     evidenceTemplate: d.evidence, actionTemplate: d.proposedAction, rationale: d.rationale,
-    origin: { incidentId: incident.id, incidentNumber: incident.number, savedBy: user, approvedBy: d.decidedBy, at: new Date().toISOString(), receipt: incident.receipt },
-    uses: 0,
+    origin: { incidentId: incident.id, incidentNumber: incident.number, savedBy: user, approvedBy: d.decidedBy, at: new Date().toISOString(), receipt: incident.receipt,
+      ...(d.correction ? { correction: d.correction } : {}) },
+    uses: existing?.uses ?? 0,
   };
   store.put('playbook', pb, w.id);
   broadcast(w.id, { type: 'playbook', playbook: pb });
-  activity(w.id, 'playbook', `Saved playbook “${pb.title}” · matches ${pb.match.resource} · ${pb.match.reason}`);
+  activity(w.id, 'playbook', `Saved playbook “${pb.title}” · matches ${pb.match.resource} · ${pb.match.reason}${d.correction ? ` · learned from ${d.correction.by}'s correction` : ''}`);
   return pb;
 }
 

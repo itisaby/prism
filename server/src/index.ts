@@ -129,7 +129,12 @@ app.get('/api/decisions/:id', c => {
 app.post('/api/decisions/:id/approve', async c => c.json(await approve(c.req.param('id'), userOf(c))));
 app.post('/api/decisions/:id/reject', async c => {
   const body = await c.req.json().catch(() => ({}));
-  return c.json(reject(c.req.param('id'), userOf(c), body.note));
+  const user = userOf(c);
+  const d = reject(c.req.param('id'), user, body.note);
+  // Sent back with a note on an incident: wake the agent (resuming its saved conversation) to revise the fix.
+  if (d.status === 'rejected' && d.decidedBy === user && body.note?.trim() && d.incidentId)
+    void investigate(d.incidentId, { by: user, note: String(body.note).trim().slice(0, 500), rejectedId: d.id });
+  return c.json(d);
 });
 app.post('/api/decisions/:id/playbook', c => c.json(savePlaybook(c.req.param('id'), userOf(c))));
 

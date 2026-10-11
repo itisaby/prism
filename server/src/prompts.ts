@@ -83,5 +83,8 @@ Rules:
   don't pin values that change between occurrences (revision numbers, pod names, timestamps). E.g. rollback_deployment
   without toRevision (it goes to the previous revision). Don't include dryRun in args; PRISM runs the dry run itself.
 - consequences: 2–4 short plain-language lines ("Image goes back to prism/checkout:v1", "2 failing pods get replaced").
+- If a person sends your proposal back with a note, treat it as their preference for how this should be fixed:
+  follow it if it is safe (verify with read tools, keep it reusable), and say in the rationale that the fix follows their instruction.
+  If their instruction is unsafe or impossible with the connected tools, explain why in the rationale and propose the closest safe fix.
 - If you can't find a safe fix, call cannot_decide with what you found.
 `;

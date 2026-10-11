@@ -169,19 +169,30 @@ async function replayInner(i: Incident, pb: Playbook) {
 }
 
 // ---------------------------------------------------------------- investigate agent (event-driven, bounded, ends by proposing)
-export async function investigate(incidentId: string): Promise<Decision | undefined> {
+export type Correction = { by: string; note: string; rejectedId: string };
+
+/**
+ * Wake the investigate agent for an incident. With a `correction` (a person sent a proposal back with a note) the agent
+ * resumes its saved conversation: the note becomes the result of its rejected propose_decision call, so it revises
+ * with everything it already learned. If there's no saved conversation (the rejected decision was a playbook replay),
+ * it starts fresh with the note in the brief.
+ */
+export async function investigate(incidentId: string, correction?: Correction): Promise<Decision | undefined> {
   const i = store.get<Incident>('incident', incidentId);
   if (!i || i.status === 'resolved' || investigating.has(i.id)) return undefined;
-  if (i.decisionId) return store.get<Decision>('decision', i.decisionId);
+  if (i.decisionId && !correction) return store.get<Decision>('decision', i.decisionId);
   investigating.add(i.id);
   const w = getWorkspace(i.workspaceId)!;
   const wt = w.watchers.find(x => x.id === i.watcherId);
   const user = w.owner;
   const receipt = i.receipt ?? emptyReceipt();
-  saveIncident({ ...i, status: 'investigating' });
-  activity(w.id, 'incident', `No playbook matches · waking the investigate agent for incident #${i.number}`);
+  saveIncident({ ...i, status: 'investigating', decisionId: undefined });
   let decision: Decision | undefined;
-  const transcript: any[] = [];
+  const transcript: any[] = correction ? resumeTranscript(i.id, correction) : [];
+  const rev = correction ? `r${randomUUID().slice(0, 3)}-` : '';
+  activity(w.id, 'incident', correction
+    ? `${correction.by} sent the fix back: “${correction.note}” · ${transcript.length ? 'resuming the agent from its saved conversation' : 'waking the agent with the note'}`
+    : `No playbook matches · waking the investigate agent for incident #${i.number}`);
   try {
     const caps = await capabilitiesText(user);
     let proposals = 0;
@@ -190,7 +201,9 @@ export async function investigate(incidentId: string): Promise<Decision | undefi
       system: INVESTIGATOR_SYSTEM,
       stablePrefix: `${CATALOG_GUIDE}\n# Connected capabilities\n${caps}`,
       prompt: `Incident #${i.number}: watcher "${wt?.title ?? i.watcherId}" fired.\nresource: ${i.resource}\nreason: ${i.reason}\n` +
-        `${i.detail ? `detail: ${i.detail}\n` : ''}Workspace panels (for context):\n` +
+        `${i.detail ? `detail: ${i.detail}\n` : ''}` +
+        (correction ? `A person (${correction.by}) rejected the previously proposed fix and said: "${correction.note}". Propose a fix that follows their instruction if it is safe.\n` : '') +
+        `Workspace panels (for context):\n` +
         JSON.stringify(w.panels.map(p => ({ id: p.id, title: p.title, binding: p.binding }))),
       tools: [
         { def: READ_TOOL, run: input => runReadTool(w.id, user, input) },
@@ -218,7 +231,7 @@ export async function investigate(incidentId: string): Promise<Decision | undefi
             proposals++;
             const problems: string[] = [];
             const evidence: Panel[] = (input.evidencePanels ?? []).slice(0, 4).map((p: any, n: number) => ({
-              ...p, id: `ev-${i.number}-${n + 1}`, layout: { x: 0, y: n * 4, w: 12, h: 4 }, refreshSec: Math.max(5, p.refreshSec || 5),
+              ...p, id: `ev-${i.number}-${rev}${n + 1}`, layout: { x: 0, y: n * 4, w: 12, h: 4 }, refreshSec: Math.max(5, p.refreshSec || 5),
               binding: { ...p.binding, args: p.binding?.args ?? {}, transform: p.binding?.transform || '$' },
             }));
             for (const p of evidence) problems.push(...(await validatePanel(p, user)).problems);
@@ -231,6 +244,7 @@ export async function investigate(incidentId: string): Promise<Decision | undefi
             decision = await createDecision({
               workspaceId: w.id, incidentId: i.id, title: input.title, summary: input.summary, rationale: input.rationale,
               evidence, proposedAction: action, source: 'agent', receipt,
+              ...(correction ? { revisionOf: correction.rejectedId, correction: { by: correction.by, note: correction.note } } : {}),
             }, user);
             if (decision.dryRun && !decision.dryRun.ok && proposals < 3) {
               saveDecision({ ...decision, status: 'rejected', note: 'Dry run failed; agent revising' });
@@ -266,12 +280,32 @@ export async function investigate(incidentId: string): Promise<Decision | undefi
       decision.receipt = receipt;
       saveDecision(decision);
       saveIncident({ ...fresh, receipt, status: fresh.status === 'resolved' ? 'resolved' : 'awaiting-approval', decisionId: decision.id });
+      if (correction) {
+        const old = store.get<Decision>('decision', correction.rejectedId);
+        if (old) saveDecision({ ...old, supersededBy: decision.id });
+      }
       activity(w.id, 'info', `Investigation took ${(receipt.ms / 1000).toFixed(1)} s · ${receipt.modelCalls} model calls · $${receipt.costUsd.toFixed(3)} · agent finished; decision waits for a person`);
     } else {
       saveIncident({ ...fresh, receipt, status: fresh.status === 'resolved' ? 'resolved' : 'open' });
     }
   }
   return decision;
+}
+
+/** The agent's saved conversation with the rejected proposal answered by the person's note (empty if none saved). */
+function resumeTranscript(incidentId: string, c: Correction): any[] {
+  const saved = store.get<{ id: string; transcript: any[] }>('agent-transcript', incidentId)?.transcript ?? [];
+  const last = saved.at(-1);
+  if (!last || last.role !== 'user' || !Array.isArray(last.content)) return [];
+  const prev = saved.at(-2);
+  const proposeIds = new Set((prev?.content ?? []).filter((b: any) => b.type === 'tool_use' && b.name === 'propose_decision').map((b: any) => b.id));
+  let found = false;
+  last.content = last.content.map((b: any) => {
+    if (b.type !== 'tool_result' || !proposeIds.has(b.tool_use_id)) return b;
+    found = true;
+    return { ...b, is_error: true, content: `Not approved. ${c.by} sent it back: "${c.note}". Investigate further if needed and call propose_decision again with a fix that follows this instruction (if it is safe).` };
+  });
+  return found ? saved : [];
 }
 
 // ---------------------------------------------------------------- demo reset
