@@ -9,7 +9,7 @@ import { api, fixtureMode } from '../lib/api.ts';
 import { calls, cap, clock, duration, receiptLine, usd } from '../lib/format.ts';
 import type { Decision, DecisionStatus, Incident, Panel, Playbook, Receipt, Workspace } from '../lib/types.ts';
 import { useConnectionNames } from '../lib/connections.ts';
-import { refreshPanel, useNow, useUser, useWorkspaceSocket, type PanelDatum } from '../lib/useWorkspaceSocket.ts';
+import { refreshPanel, useNow, useUser, useWorkspaceSocket, type PanelDatum, useFixtureSuffix } from '../lib/useWorkspaceSocket.ts';
 
 interface Bundle { decision: Decision; incident?: Incident; playbook?: Playbook; workspace?: { id: string; title: string; owner: string } }
 const RANK: Record<DecisionStatus, number> = { pending: 0, approved: 1, rejected: 2, executed: 3, failed: 3 };
@@ -26,7 +26,6 @@ export function DecisionView({ id }: { id: string }) {
   const [note, setNote] = useState('');
   const [showRequest, setShowRequest] = useState(false);
   const { push: toast, view: toastView } = useToasts();
-  const q = fixtureMode() ? '?fixture=1' : '';
 
   const load = useCallback(async () => {
     try {
@@ -40,6 +39,7 @@ export function DecisionView({ id }: { id: string }) {
   useEffect(() => { void load(); }, [load]);
 
   const live = useWorkspaceSocket(bundle?.decision.workspaceId);
+  const q = useFixtureSuffix(live.mode);
   const decision = fresher(bundle?.decision, live.state.decisions.find(d => d.id === id));
   const incident = live.state.incidents.find(i => i.id === decision?.incidentId) ?? bundle?.incident;
   const playbook = live.state.playbooks.find(p => p.id === decision?.playbookId) ?? bundle?.playbook;
@@ -345,12 +345,16 @@ function PlaybookCard({ playbook, workspace }: { playbook: Playbook; workspace?:
         <span className="soft-ic"><Icon name="book" size={16} /></span>
         <div className="grow"><b>{playbook.title}</b><div className="muted small">Playbook · used {playbook.uses === 1 ? 'once' : playbook.uses === 2 ? 'twice' : `${playbook.uses} times`}</div></div>
       </div>
+      <div className="pb-group">
       <div className="wh-title">Runs when</div>
       <div className="check-line"><Icon name="radar" size={14} className="c-acc" />“{watcher?.title ?? playbook.match.watcherId}” fires</div>
       <div className="check-line"><Icon name="box" size={14} className="c-acc" />on <span className="mono">{playbook.match.resource}</span></div>
       <div className="check-line"><Icon name="circle-alert" size={14} className="c-acc" />with reason <span className="mono">{playbook.match.reason}</span></div>
+      </div>
+      <div className="pb-group">
       <div className="wh-title">Then</div>
       <p className="small ink2">Shows this evidence and proposes: {playbook.actionTemplate.label.toLowerCase()}. A person always approves first.</p>
+      </div>
       <div className="origin"><Icon name="history" size={13} />Learned from incident #{playbook.origin.incidentNumber} at {new Date(playbook.origin.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}. Saved by {cap(playbook.origin.savedBy)}{playbook.origin.approvedBy ? `, approved by ${cap(playbook.origin.approvedBy)}` : ''}.</div>
     </div>
   );

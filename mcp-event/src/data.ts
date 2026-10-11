@@ -18,7 +18,7 @@ export interface JudgingSlot { teamId: string; judge: string; slot: string; room
 export interface ScheduleItem { time: string; title: string; room: string }
 
 export const EXPECTED_ATTENDANCE = 420;
-export const DOORS_HOUR = 8;
+export const DOORS_HOUR = 7; // doors 07:30; first check-in bucket is 07:00
 
 export class UserError extends Error {}
 
@@ -49,9 +49,9 @@ interface State {
   rng: () => number;
 }
 
-export let state: State = seed();
-
 const MIN = 60_000;
+/** Live state; assigned by seed() at the bottom of this module (after all helpers are initialized). */
+export let state = {} as State;
 
 function seed(now = Date.now()): State {
   const rng = mulberry32(20261011);
@@ -93,9 +93,9 @@ function seed(now = Date.now()): State {
   ];
   for (const r of help) if (r.status === 'assigned') mentors.find(m => m.id === r.mentorId)!.currentRequestId = r.id;
 
-  // Check-ins: doors at 08:00; front-loaded arrival curve up to the current hour, ~80% of expected so far.
+  // Check-ins: doors at 07:30; front-loaded arrival curve up to the current hour, ~80% of expected so far.
   const hourNow = new Date(now).getHours();
-  const first = hourNow >= DOORS_HOUR + 2 ? DOORS_HOUR : Math.max(0, hourNow - 5);
+  const first = hourNow >= DOORS_HOUR + 2 ? DOORS_HOUR : Math.max(0, hourNow - 2); // off-hours testing: last 3 hours
   const hours: number[] = [];
   for (let h = first; h <= hourNow; h++) hours.push(h);
   const curve = [0.36, 0.3, 0.14, 0.08, 0.05, 0.03, 0.02, 0.01, 0.01];
@@ -129,7 +129,7 @@ function seed(now = Date.now()): State {
   });
 
   const schedule: ScheduleItem[] = [
-    { time: '08:00', title: 'Doors open & check-in', room: 'Lobby' },
+    { time: '07:30', title: 'Doors open & check-in', room: 'Lobby' },
     { time: '09:00', title: 'Kickoff keynote', room: 'Main Stage' },
     { time: '09:45', title: 'Hacking begins', room: 'Hack Floor' },
     { time: '12:00', title: 'Lunch', room: 'Atrium' },
@@ -287,7 +287,7 @@ const SPIKE_TOPICS = ['MCP auth handshake returns 401', 'MCP tool outputSchema r
 export function spike(now = Date.now()): HelpRequest[] {
   const busy = new Set(state.help.filter(r => r.status !== 'resolved').map(r => r.teamId));
   const pool = [...state.teams.filter(t => !busy.has(t.id)), ...state.teams.filter(t => busy.has(t.id))];
-  return [12, 10, 8].map((age, i) => newHelpRequest(pool[i].id, SPIKE_TOPICS[i], 'MCP', now - age * MIN - 15_000));
+  return [12, 11, 8].map((age, i) => newHelpRequest(pool[i].id, SPIKE_TOPICS[i], 'MCP', now - age * MIN - 15_000));
 }
 
 // ---------------------------------------------------------------- live ticker
@@ -336,3 +336,5 @@ export function startSimulation(everyMs = 10_000) {
   if (timer) clearInterval(timer);
   timer = setInterval(() => tick(), everyMs);
 }
+
+state = seed();

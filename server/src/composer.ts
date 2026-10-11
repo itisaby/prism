@@ -1,5 +1,8 @@
 // Composer: request → (sample read tools) → propose_ops → execute-to-validate → apply. ≤3 proposals.
+import { writeFileSync } from 'node:fs';
+import path from 'node:path';
 import type { Op, Receipt, Workspace } from '../../shared/types.ts';
+import { ROOT } from './config.ts';
 import { activity, broadcast } from './bus.ts';
 import { AgentStopped, READ_TOOL, capabilitiesText, emptyReceipt, runReadTool, toolLoop } from './llm.ts';
 import { CATALOG_GUIDE, COMPOSER_SYSTEM } from './prompts.ts';
@@ -42,6 +45,7 @@ export async function compose(wsId: string, user: string, prompt: string): Promi
           },
           run: async input => {
             proposals++;
+            writeFileSync(path.join(ROOT, 'data', `last-proposal-${proposals}.json`), JSON.stringify(input, null, 2));
             const ops: Op[] = [...(input.ops ?? [])];
             if (input.title) ops.push({ op: 'rename_workspace', title: input.title });
             try {

@@ -11,7 +11,7 @@ import { Badge, LiveDot, QrModal, useToasts } from './ui.tsx';
 import { api, ApiError, fixtureMode } from '../lib/api.ts';
 import { calls, clock, receiptLine, usd } from '../lib/format.ts';
 import type { Activity, ActivityKind, Decision, Incident, Layout, Receipt, Workspace } from '../lib/types.ts';
-import { useNow, useUser, useWorkspaceSocket } from '../lib/useWorkspaceSocket.ts';
+import { useNow, useUser, useWorkspaceSocket, useFixtureSuffix } from '../lib/useWorkspaceSocket.ts';
 import { useConnectionNames } from '../lib/connections.ts';
 
 const GRID = { cols: 12, rowHeight: 40, margin: [16, 16] as const, containerPadding: [0, 0] as const };
@@ -29,7 +29,7 @@ export function WorkspaceView({ id }: { id: string }) {
   const [connKey, setConnKey] = useState(0);
   const connections = useConnectionNames(connKey || undefined);
   const { push: toast, view: toastView } = useToasts();
-  const q = fixtureMode() ? '?fixture=1' : '';
+  const q = useFixtureSuffix(mode);
 
   // ---- compose (from the landing page `?compose=` or the chat bar)
   const compose = useCallback(async (prompt: string) => {
@@ -109,12 +109,13 @@ export function WorkspaceView({ id }: { id: string }) {
   }, [openIncidents, workspace]);
   const pending = decisions.filter(d => d.status === 'pending');
 
-  const shareUrl = typeof window !== 'undefined' ? `${window.location.origin}/j/${id}${q}` : '';
+  const [shareUrl, setShareUrl] = useState('');
+  useEffect(() => { setShareUrl(`${window.location.origin}/j/${id}${q}`); }, [id, q]);
 
   return (
     <div className="app">
       <Decor variant="app" />
-      <Rail activeId={id} user={user} playbooks={playbooks} open={railOpen} onClose={() => setRailOpen(false)}
+      <Rail mode={mode} activeId={id} user={user} playbooks={playbooks} open={railOpen} onClose={() => setRailOpen(false)}
         onConnected={c => { setConnKey(k => k + 1); toast({ text: `Connected ${c.name} · ${c.tools.length} tools`, tone: 'ok' }); }} />
       <main className="main">
         <header className="topbar">

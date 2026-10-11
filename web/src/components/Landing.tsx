@@ -3,15 +3,16 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { Decor } from './Decor.tsx';
+import { useFixtureSuffix } from '../lib/useWorkspaceSocket.ts';
 import { Icon, Logo } from './Icon.tsx';
 import { api, ApiError, fixtureMode } from '../lib/api.ts';
 import type { Workspace } from '../lib/types.ts';
 
 const DOMAINS = [
   { id: 'devops', label: 'DevOps', title: 'Shop cluster', prompt: 'Cluster health for my shop app: failing pods, deployments I can roll back or restart, warning events, CPU per app' },
-  { id: 'sdlc', label: 'SDLC', title: 'SDLC health', prompt: 'Open PRs by age next to failing CI runs, and issues nobody has touched in two weeks' },
-  { id: 'events', label: 'Event ops', title: 'Event ops', prompt: "Today's hackathon: registrations vs capacity, check-ins per hour, and sessions that are overbooked" },
-  { id: 'finance', label: 'Finance', title: 'Revenue', prompt: 'Failed payments this week by reason, refunds waiting for approval, and the MRR trend' },
+  { id: 'events', label: 'Event ops', title: 'Hackathon ops', prompt: "Run today's hackathon: check-ins vs expected, help requests waiting longest with a way to assign a mentor, unclaimed volunteer tasks" },
+  { id: 'sdlc', label: 'SDLC', title: 'SDLC health', prompt: 'Open PRs in my repo by age with failing checks, and stale issues' },
+  { id: 'finance', label: 'Finance', title: 'Revenue', prompt: 'Revenue vs refunds over the last 30 days and the latest failed payments' },
 ];
 
 export function Landing() {
@@ -43,7 +44,7 @@ export function Landing() {
       router.push(`/w/${ws.id}?compose=${encodeURIComponent(text)}${fixtureMode() ? '&fixture=1' : ''}`);
     } catch (e) {
       if (e instanceof ApiError && e.unreachable) {
-        router.push(`/w/demo?fixture=1&compose=${encodeURIComponent(text)}`);
+        router.push(`/w/${domain.id === 'events' ? 'events' : 'demo'}?fixture=1&compose=${encodeURIComponent(text)}`);
         return;
       }
       setErr((e as Error).message);
@@ -51,7 +52,7 @@ export function Landing() {
     }
   };
 
-  const q = fixtureMode() ? '?fixture=1' : '';
+  const q = useFixtureSuffix();
   return (
     <div className="landing">
       <Decor variant="hero" />
@@ -103,12 +104,13 @@ export function Landing() {
         <div className="servers">
           <span className="mono servers-label">Works with any MCP server</span>
           {[
-            { n: 'Kubernetes', i: 'container' }, { n: 'GitHub', i: 'git' }, { n: 'Event DB', i: 'database' }, { n: 'agentregistry', i: 'search' },
+            { n: 'Kubernetes', i: 'container' }, { n: 'Event DB', i: 'calendar' }, { n: 'GitHub', i: 'github' }, { n: 'Stripe', i: 'credit-card' },
           ].map(s => (
             <span key={s.n} className="server-chip"><span className="dot d-ok" /><Icon name={s.i} size={13} />{s.n}</span>
           ))}
           <span className="server-chip"><span className="dot d-off" /><Icon name="link" size={13} />your own MCP URL</span>
         </div>
+        <div className="via mono"><Icon name="shield" size={12} />Every tool call goes through agentgateway · servers discovered from agentregistry</div>
       </section>
 
       <section className="values" id="how">

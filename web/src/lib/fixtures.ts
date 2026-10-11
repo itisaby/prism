@@ -7,7 +7,8 @@ import type {
 const ZERO: Receipt = { modelCalls: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, costUsd: 0, ms: 0 };
 const iso = (agoMs = 0) => new Date(Date.now() - agoMs).toISOString();
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
-const clone = <T,>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
+const clone = <T,>(v: T): T => (v === undefined ? v : (JSON.parse(JSON.stringify(v)) as T));
+const cap = (x: string) => (x ? x[0].toUpperCase() + x.slice(1) : x);
 let seq = 100;
 const nextId = (p: string) => `${p}-${++seq}`;
 
@@ -20,15 +21,15 @@ function k8s(tool: string, args: Record<string, unknown> = {}, transform = '$') 
 
 const PANELS: Panel[] = [
   {
-    id: 'p-overview', title: 'Cluster overview', refreshSec: 5, layout: { x: 0, y: 0, w: 12, h: 3 },
+    id: 'p-overview', title: 'Cluster overview', refreshSec: 5, layout: { x: 0, y: 0, w: 12, h: 4 },
     binding: k8s('cluster_overview', {}, '{ "metrics": [...] }'),
     components: [{ id: 'root', component: 'MetricRow', items: { path: '/metrics' } }],
   },
   {
-    id: 'p-deploys', title: 'Deployments in shop', refreshSec: 5, layout: { x: 0, y: 3, w: 5, h: 8 },
+    id: 'p-deploys', title: 'Deployments in shop', refreshSec: 5, layout: { x: 0, y: 4, w: 5, h: 8 },
     binding: k8s('list_deployments', { namespace: 'shop' }),
     components: [{ id: 'root', component: 'StatusList', items: { path: '/deployments' },
-      recordActions: [{ id: 'restart', label: 'Restart' }, { id: 'rollback', label: 'Roll back' }, { id: 'scale', label: 'Scale to 3' }] }],
+      }],
     actions: [
       { id: 'restart', label: 'Restart', connectionId: 'k8s', tool: 'restart_deployment', recordKey: 'name', args: { namespace: { value: 'shop' }, name: { record: 'app' } } },
       { id: 'rollback', label: 'Roll back', connectionId: 'k8s', tool: 'rollback_deployment', recordKey: 'name', args: { namespace: { value: 'shop' }, name: { record: 'app' } } },
@@ -36,17 +37,17 @@ const PANELS: Panel[] = [
     ],
   },
   {
-    id: 'p-pods', title: 'Problem pods', refreshSec: 5, layout: { x: 5, y: 3, w: 7, h: 8 },
+    id: 'p-pods', title: 'Problem pods', refreshSec: 5, layout: { x: 5, y: 4, w: 7, h: 8 },
     binding: k8s('list_pods', { namespace: 'shop', problemsOnly: true }),
     components: [{ id: 'root', component: 'DataTable', rows: { path: '/pods' }, toneKey: 'tone',
       columns: [{ key: 'name', label: 'Pod' }, { key: 'reason', label: 'Reason' }, { key: 'restarts', label: 'Restarts' }, { key: 'age', label: 'Age' }],
-      recordActions: [{ id: 'rollback', label: 'Roll back' }] }],
+      }],
     actions: [
       { id: 'rollback', label: 'Roll back', connectionId: 'k8s', tool: 'rollback_deployment', recordKey: 'name', args: { namespace: { value: 'shop' }, name: { record: 'deployment' } } },
     ],
   },
   {
-    id: 'p-cpu', title: 'CPU per app', refreshSec: 10, layout: { x: 0, y: 11, w: 12, h: 7 },
+    id: 'p-cpu', title: 'CPU per app', refreshSec: 10, layout: { x: 0, y: 12, w: 12, h: 7 },
     binding: k8s('get_usage', { namespace: 'shop' }),
     components: [{ id: 'root', component: 'TimeSeries', data: { path: '/rows' }, x: 't', kind: 'line',
       series: APPS.map(a => ({ key: a, label: a })) }],
@@ -72,10 +73,47 @@ const EVIDENCE: Panel[] = [
   },
 ];
 
+// Event ops workspace (Event DB MCP: teams, help requests, mentors, check-ins, tasks).
+function ev(tool: string, args: Record<string, unknown> = {}) {
+  return { connectionId: 'event', tool, args, transform: '$' };
+}
+const EVENT_PANELS: Panel[] = [
+  {
+    id: 'e-overview', title: 'Right now', refreshSec: 10, layout: { x: 0, y: 0, w: 12, h: 4 },
+    binding: ev('event_overview'),
+    components: [{ id: 'root', component: 'MetricRow', items: { path: '/metrics' } }],
+  },
+  {
+    id: 'e-help', title: 'Help requests waiting longest', refreshSec: 10, layout: { x: 0, y: 4, w: 7, h: 8 },
+    binding: ev('list_help_requests', { status: 'open' }),
+    components: [{ id: 'root', component: 'DataTable', rows: { path: '/requests' }, toneKey: 'tone',
+      columns: [{ key: 'team', label: 'Team' }, { key: 'topic', label: 'Topic' }, { key: 'table', label: 'Table' }, { key: 'waiting', label: 'Waiting' }] }],
+    actions: [
+      { id: 'assign', label: 'Assign mentor', connectionId: 'event', tool: 'assign_mentor', recordKey: 'id', args: { requestId: { record: 'id' } } },
+      { id: 'resolve', label: 'Resolve', connectionId: 'event', tool: 'resolve_help_request', recordKey: 'id', args: { requestId: { record: 'id' } } },
+    ],
+  },
+  {
+    id: 'e-tasks', title: 'Unclaimed volunteer tasks', refreshSec: 15, layout: { x: 7, y: 4, w: 5, h: 8 },
+    binding: ev('list_tasks', { claimed: false }),
+    components: [{ id: 'root', component: 'CardList', items: { path: '/tasks' }, titleKey: 'title', subtitleKey: 'where', badgeKey: 'when', toneKey: 'tone' }],
+    actions: [{ id: 'claim', label: 'Claim', connectionId: 'event', tool: 'claim_task', recordKey: 'id', args: { taskId: { record: 'id' }, volunteer: { user: true } } }],
+  },
+  {
+    id: 'e-checkins', title: 'Check-ins vs expected', refreshSec: 15, layout: { x: 0, y: 12, w: 12, h: 7 },
+    binding: ev('checkins_by_hour'),
+    components: [{ id: 'root', component: 'TimeSeries', data: { path: '/hours' }, x: 'hour', kind: 'bar',
+      series: [{ key: 'checkedIn', label: 'Checked in' }, { key: 'expected', label: 'Expected' }] }],
+  },
+];
+
 // ------------------------------------------------------------------ world state
 interface World {
   broken: boolean;
   workspace: Workspace;
+  events: Workspace;
+  eventStats: Stats;
+  helpOpen: number;
   incidents: Incident[];
   decisions: Decision[];
   playbooks: Playbook[];
@@ -137,7 +175,11 @@ function seedWorld(): World {
   };
   const act = (kind: ActivityKind, text: string, ago: number): Activity => ({ id: nextId('a'), workspaceId: 'demo', at: iso(ago), kind, text });
   return {
-    broken: true, workspace, cpu,
+    broken: true, workspace, cpu, helpOpen: 7,
+    events: { id: 'events', owner: 'arnab', title: 'Hackathon ops', version: 3, members: ['judge'], panels: clone(EVENT_PANELS),
+      watchers: [{ id: 'w-help', panelId: 'e-help', title: 'Help request waiting over 20 min', severity: 'warning', condition: 'requests[waitingMin > 20]' }],
+      buildReceipt: { modelCalls: 3, inputTokens: 22_000, outputTokens: 2_600, cacheReadTokens: 8_000, costUsd: 0.12, ms: 19_800 } },
+    eventStats: { refreshes: 412, modelCalls: 3, costUsd: 0.12 },
     incidents: [incident],
     decisions: [replay, agent],
     playbooks: [clone(PLAYBOOK)],
@@ -146,6 +188,12 @@ function seedWorld(): World {
       { id: 'k8s', name: 'Kubernetes', url: 'http://localhost:7300/mcp', status: 'ok', viaGateway: true, protocolVersion: '2026-07-28',
         tools: ['cluster_overview', 'list_deployments', 'list_pods', 'list_events', 'get_pod_logs', 'get_usage', 'describe_deployment',
           'restart_deployment', 'scale_deployment', 'set_image', 'rollback_deployment'].map(name => ({ name, inputSchema: {} })) },
+      { id: 'event', name: 'Event DB', url: 'http://localhost:7400/mcp', status: 'ok', viaGateway: true, protocolVersion: '2026-07-28',
+        tools: ['event_overview', 'list_teams', 'list_help_requests', 'list_mentors', 'checkins_by_hour', 'list_tasks', 'assign_mentor', 'resolve_help_request', 'claim_task'].map(name => ({ name, inputSchema: {} })) },
+      { id: 'github', name: 'GitHub', url: 'https://api.githubcopilot.com/mcp/', status: 'ok', viaGateway: true, protocolVersion: '2026-07-28',
+        tools: Array.from({ length: 49 }, (_, i) => ({ name: `tool_${i}`, inputSchema: {} })) },
+      { id: 'stripe', name: 'Stripe', url: 'https://mcp.stripe.com', status: 'ok', viaGateway: true, protocolVersion: '2026-07-28',
+        tools: Array.from({ length: 22 }, (_, i) => ({ name: `tool_${i}`, inputSchema: {} })) },
     ],
     activity: [
       act('decision', 'Decision ready: Roll back checkout-worker to v1 · waiting for approval', 46_000),
@@ -220,6 +268,29 @@ function panelData(panelId: string): unknown {
             { message: 'Back-off pulling image "checkout:v2-bad"', object: 'pod/checkout-worker-7d9f-q8n', count: '×4', tone: 'warn' },
           ]
         : [{ message: 'Scaled up replica set checkout-worker-5c8b to 2', object: 'deployment/checkout-worker', count: '×1', tone: 'ok' }] };
+    case 'e-overview':
+      return { metrics: [
+        { label: 'Checked in', value: `${212 + Math.floor(Math.random() * 3)} / 260`, hint: '82% of expected', tone: 'ok' },
+        { label: 'Teams', value: '58', hint: '4 still forming', tone: 'ok' },
+        { label: 'Help waiting', value: String(w.helpOpen), hint: w.helpOpen > 3 ? 'longest 26 min' : 'longest 6 min', tone: w.helpOpen > 3 ? 'warn' : 'ok' },
+        { label: 'Mentors free', value: '3 / 14', hint: '2 on break', tone: 'warn' },
+      ] };
+    case 'e-help':
+      return { requests: [
+        { id: 'h-31', team: 'Lambda Llamas', topic: 'MCP auth with OAuth', table: 'B12', waiting: '26 min', waitingMin: 26, tone: 'bad' },
+        { id: 'h-34', team: 'Prompt Injectors', topic: 'Deploying to Fly', table: 'C03', waiting: '21 min', waitingMin: 21, tone: 'bad' },
+        { id: 'h-38', team: 'Vector Vikings', topic: 'Embedding costs', table: 'A07', waiting: '12 min', waitingMin: 12, tone: 'warn' },
+        { id: 'h-40', team: 'Token Ring', topic: 'React Native build', table: 'D21', waiting: '6 min', waitingMin: 6, tone: 'ok' },
+        { id: 'h-41', team: 'Async Avengers', topic: 'Postgres pgvector', table: 'B04', waiting: '3 min', waitingMin: 3, tone: 'ok' },
+      ].slice(0, Math.max(1, w.helpOpen - 2)) };
+    case 'e-tasks':
+      return { tasks: [
+        { id: 't-7', title: 'Refill coffee station', where: 'Floor 2 · kitchen', when: 'now', tone: 'warn' },
+        { id: 't-9', title: 'Judge room setup', where: 'Room 4B', when: '3:30 PM', tone: 'ok' },
+        { id: 't-12', title: 'Badge desk relief', where: 'Lobby', when: '4:00 PM', tone: 'ok' },
+      ] };
+    case 'e-checkins':
+      return { hours: ['8 AM', '9 AM', '10 AM', '11 AM', '12 PM', '1 PM', '2 PM'].map((hour, i) => ({ hour, checkedIn: [18, 74, 61, 33, 14, 8, 4][i], expected: [20, 80, 70, 40, 20, 15, 15][i] })) };
     default:
       return { items: [] };
   }
@@ -227,11 +298,15 @@ function panelData(panelId: string): unknown {
 
 // ------------------------------------------------------------------ live hub (stands in for the WebSocket)
 type Listener = (m: ServerMessage) => void;
-const listeners = new Set<Listener>();
+const listeners = new Map<Listener, string>();
 let timer: ReturnType<typeof setInterval> | undefined;
 
-function emit(m: ServerMessage) {
-  for (const l of listeners) l(m);
+function emit(m: ServerMessage, wsId = 'demo') {
+  for (const [l, id] of listeners) if (id === wsId) l(m);
+}
+function wsOf(id: string | undefined): Workspace {
+  const w = W();
+  return id === 'events' ? w.events : w.workspace;
 }
 function activity(kind: ActivityKind, text: string) {
   const item: Activity = { id: nextId('a'), workspaceId: 'demo', at: iso(), kind, text };
@@ -243,21 +318,32 @@ function tick() {
   const w = W();
   w.cpu = [...w.cpu.slice(1), cpuPoint(new Date(), w.cpu.length + Math.random() * 100)];
   for (const p of w.workspace.panels) emit({ type: 'panel-data', panelId: p.id, data: panelData(p.id), at: iso() });
+  for (const p of w.events.panels) emit({ type: 'panel-data', panelId: p.id, data: panelData(p.id), at: iso() }, 'events');
+  w.eventStats = { ...w.eventStats, refreshes: w.eventStats.refreshes + 2 };
+  emit({ type: 'stats', stats: w.eventStats }, 'events');
   for (const d of w.decisions) for (const p of d.evidence) emit({ type: 'panel-data', panelId: p.id, data: panelData(p.id), at: iso() });
   w.stats = { ...w.stats, refreshes: w.stats.refreshes + w.workspace.panels.length };
   emit({ type: 'stats', stats: w.stats });
 }
 
-export function fixtureSubscribe(_wsId: string, listener: Listener): () => void {
+export function fixtureSubscribe(wsId: string, listener: Listener): () => void {
   const w = W();
-  listeners.add(listener);
+  const key = wsId === 'events' ? 'events' : 'demo';
+  listeners.set(listener, key);
   // Same "hello" the real server sends on connect.
   setTimeout(() => {
+    if (key === 'events') {
+      listener({ type: 'workspace', workspace: clone(w.events) });
+      for (const p of w.events.panels) listener({ type: 'panel-data', panelId: p.id, data: panelData(p.id), at: iso(1500) });
+      listener({ type: 'stats', stats: w.eventStats });
+      for (const d of w.decisions.filter(x => x.workspaceId === 'events')) listener({ type: 'decision', decision: clone(d) });
+      return;
+    }
     listener({ type: 'workspace', workspace: clone(w.workspace) });
     for (const p of w.workspace.panels) listener({ type: 'panel-data', panelId: p.id, data: panelData(p.id), at: iso(1500) });
     for (const d of w.decisions) for (const p of d.evidence) listener({ type: 'panel-data', panelId: p.id, data: panelData(p.id), at: iso(1500) });
     for (const i of w.incidents) listener({ type: 'incident', incident: clone(i) });
-    for (const d of w.decisions) listener({ type: 'decision', decision: clone(d) });
+    for (const d of w.decisions.filter(x => x.workspaceId !== 'events' && x.id !== 'agent')) listener({ type: 'decision', decision: clone(d) });
     for (const p of w.playbooks) listener({ type: 'playbook', playbook: clone(p) });
     listener({ type: 'stats', stats: w.stats });
     for (const a of [...w.activity].reverse()) listener({ type: 'activity', item: a });
@@ -272,15 +358,26 @@ export function fixtureSubscribe(_wsId: string, listener: Listener): () => void 
 // ------------------------------------------------------------------ REST stand-in
 class FixtureError extends Error {}
 
-function snapshot() {
+function snapshot(id: string) {
   const w = W();
-  return { workspace: clone(w.workspace), incidents: clone(w.incidents), decisions: clone(w.decisions), playbooks: clone(w.playbooks), stats: w.stats };
+  if (id === 'events') return { workspace: clone(w.events), incidents: [], decisions: clone(w.decisions.filter(d => d.workspaceId === 'events')), playbooks: [], stats: w.eventStats };
+  return { workspace: clone(w.workspace), incidents: clone(w.incidents), decisions: clone(w.decisions.filter(d => d.workspaceId !== 'events' && d.id !== 'agent')), playbooks: clone(w.playbooks), stats: w.stats };
 }
 
 async function execute(d: Decision, user: string): Promise<Decision> {
   const w = W();
+  const key = d.workspaceId === 'events' ? 'events' : 'demo';
   d.status = 'approved'; d.decidedBy = user; d.decidedAt = iso();
-  emit({ type: 'decision', decision: clone(d) });
+  emit({ type: 'decision', decision: clone(d) }, key);
+  if (key === 'events') {
+    await sleep(900);
+    d.status = 'executed';
+    d.result = { ok: true, text: `${d.proposedAction.tool} → ok`, gateway: 'allowed · signature + exact arguments' };
+    w.helpOpen = Math.max(1, w.helpOpen - 1);
+    emit({ type: 'decision', decision: clone(d) }, key);
+    tick();
+    return clone(d);
+  }
   activity('decision', `Approved by ${user}: ${d.proposedAction.label}`);
   await sleep(500);
   activity('gateway', `agentgateway verified the signed approval for ${d.proposedAction.tool} · allowed`);
@@ -321,58 +418,66 @@ export async function fixtureRequest(method: string, path: string, body: unknown
     activity('info', `Connected ${c.name} · ${c.tools.length} tools`);
     return c;
   }
-  if (is('GET', 'workspaces')) return [{ id: 'demo', title: w.workspace.title, owner: 'arnab' }, { id: 'sdlc', title: 'SDLC health', owner: 'arnab' }];
-  if (is('POST', 'workspaces')) return clone(w.workspace);
-  if (is('GET', 'workspaces', null)) return snapshot();
+  if (is('GET', 'workspaces')) return [{ id: 'demo', title: w.workspace.title, owner: 'arnab' }, { id: 'events', title: w.events.title, owner: 'arnab' }];
+  if (is('POST', 'workspaces')) return clone(/event|hack/i.test(String(b.title ?? '')) ? w.events : w.workspace);
+  if (is('GET', 'workspaces', null)) return snapshot(seg[1]);
   if (is('POST', 'workspaces', null, 'compose')) {
-    emit({ type: 'compose', state: 'started' });
+    const target = wsOf(seg[1]);
+    const wsKey = target.id === 'events' ? 'events' : 'demo';
+    emit({ type: 'compose', state: 'started' }, wsKey);
     activity('model', `claude-opus-5-5 · planning for “${String(b.prompt ?? '').slice(0, 60)}”`);
     await sleep(700);
-    activity('tool', 'list_events {"namespace":"shop","type":"Warning"} → 8 events (sample)');
+    activity('tool', `${target.panels[1]?.binding.tool ?? 'list'} ${JSON.stringify(target.panels[1]?.binding.args ?? {})} → sampled`);
     await sleep(700);
-    activity('validate', 'Panel “Warning events” validated: binding executed, A2UI surface OK');
+    activity('validate', `${target.panels.length} panels validated: bindings executed, A2UI surfaces OK`);
     await sleep(500);
     const receipt: Receipt = { modelCalls: 2, inputTokens: 9_200, outputTokens: 880, cacheReadTokens: 6_100, costUsd: 0.04, ms: 1_900 };
-    const summary = 'Your workspace is up to date: 4 panels refresh every 5–10 s with no model calls, and a watcher opens an incident when pods fail to start.';
-    w.stats = { ...w.stats, modelCalls: w.stats.modelCalls + 2, costUsd: w.stats.costUsd + 0.04 };
-    emit({ type: 'stats', stats: w.stats });
-    emit({ type: 'compose', state: 'done', summary, receipt });
-    return { summary, receipt, workspace: clone(w.workspace) };
+    const summary = `${target.title} is ready: ${target.panels.length} panels refresh from your tools with no model calls, and a watcher opens an incident when “${target.watchers[0]?.title ?? 'something'}” happens.`;
+    emit({ type: 'compose', state: 'done', summary, receipt }, wsKey);
+    return { summary, receipt, workspace: clone(target) };
   }
   if (is('POST', 'workspaces', null, 'ops')) {
     for (const op of (b.ops as { op: string; panelId?: string; layout?: Panel['layout'] }[]) ?? []) {
       if (op.op === 'move_resize') {
-        const p = w.workspace.panels.find(x => x.id === op.panelId);
+        const p = wsOf(seg[1]).panels.find(x => x.id === op.panelId);
         if (p && op.layout) p.layout = op.layout;
       }
     }
-    w.workspace.version += 1;
-    return clone(w.workspace);
+    wsOf(seg[1]).version += 1;
+    return clone(wsOf(seg[1]));
   }
   if (is('POST', 'workspaces', null, 'members')) {
-    if (!w.workspace.members.includes(String(b.user))) w.workspace.members.push(String(b.user));
-    return clone(w.workspace);
+    const t = wsOf(seg[1]);
+    if (!t.members.includes(String(b.user))) t.members.push(String(b.user));
+    return clone(t);
   }
   if (is('POST', 'workspaces', null, 'panels', null, 'refresh')) return { data: panelData(seg[3]), at: iso() };
   if (is('POST', 'workspaces', null, 'panels', null, 'actions')) {
-    const panel = w.workspace.panels.find(p => p.id === seg[3]);
+    const target = wsOf(seg[1]);
+    const panel = target.panels.find(p => p.id === seg[3]);
     const action = panel?.actions?.find(a => a.id === b.actionId);
     const record = (b.record ?? {}) as Record<string, unknown>;
     if (!panel || !action) throw new FixtureError('Unknown action');
-    const name = String(record.deployment ?? record.app ?? record.name ?? 'checkout-worker');
-    const args: Record<string, unknown> = { namespace: 'shop', name };
-    if (action.tool === 'scale_deployment') args.replicas = 3;
+    const args: Record<string, unknown> = {};
+    for (const [k, src] of Object.entries(action.args)) {
+      if ('record' in src) args[k] = record[src.record];
+      else if ('value' in src) args[k] = src.value;
+      else args[k] = user;
+    }
+    const subject = String(record[action.recordKey === 'id' ? (record.team ? 'team' : record.title ? 'title' : 'id') : action.recordKey] ?? record.name ?? '');
+    const conn = W().connections.find(c => c.id === action.connectionId);
     const d: Decision = {
-      ...clone(w.decisions[0]), id: nextId('d'), incidentId: undefined, source: 'person', playbookId: undefined, matchMs: undefined,
-      title: `${action.label} ${name}`, summary: `${user} asked to ${action.label.toLowerCase()} ${name} from the “${panel.title}” panel.`,
-      rationale: 'Requested from a panel.', status: 'pending', createdAt: iso(), receipt: ZERO,
-      proposedAction: { connectionId: 'k8s', tool: action.tool, args, label: `${action.label} ${name}`,
-        consequences: [`Calls ${action.tool} on shop/${name}`, 'Kubernetes replaces pods gradually (rolling update)', 'Runs in namespace shop as the PRISM operator account'] },
-      dryRun: { ok: true, lines: [`${action.tool} accepted by the API server (dry run)`, "You're allowed to do this in shop (RBAC)"] },
+      id: nextId('d'), workspaceId: target.id, source: 'person', status: 'pending', createdAt: iso(), receipt: ZERO,
+      title: `${action.label}: ${subject}`, summary: `${cap(user)} asked to ${action.label.toLowerCase()} for ${subject}, from the “${panel.title}” panel.`,
+      rationale: 'Requested from a panel action.', evidence: [clone(panel)],
+      proposedAction: { connectionId: action.connectionId, tool: action.tool, args, label: `${action.label}: ${subject}`,
+        consequences: [`Calls ${action.tool} on ${conn?.name ?? action.connectionId} with the exact arguments below`, 'The panel refreshes right after, with no model call'] },
+      dryRun: { ok: true, lines: [`${action.tool} arguments match the tool's input schema`] },
     };
     w.decisions.push(d);
-    emit({ type: 'decision', decision: clone(d) });
-    activity('decision', `${user} proposed: ${d.title} · waiting for approval`);
+    const key = target.id === 'events' ? 'events' : 'demo';
+    emit({ type: 'decision', decision: clone(d) }, key);
+    if (key === 'demo') activity('decision', `${user} proposed: ${d.title} · waiting for approval`);
     return clone(d);
   }
   if (is('POST', 'incidents', null, 'investigate')) return clone(w.decisions.find(d => d.source === 'agent'));

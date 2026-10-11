@@ -9,7 +9,7 @@ import { fixtureMode, setUser } from '../lib/api.ts';
 import { useConnectionNames } from '../lib/connections.ts';
 import { cap, clock, timeAgo } from '../lib/format.ts';
 import type { Decision } from '../lib/types.ts';
-import { useNow, useWorkspaceSocket } from '../lib/useWorkspaceSocket.ts';
+import { useNow, useWorkspaceSocket, useFixtureSuffix } from '../lib/useWorkspaceSocket.ts';
 
 /** The judge's phone: join one workspace as an approver. */
 export function JoinView({ wsId }: { wsId: string }) {
@@ -30,7 +30,7 @@ function JoinInner({ wsId, user }: { wsId: string; user: string }) {
   const { workspace, decisions, incidents, panelData } = state;
   const names = useConnectionNames();
   const [perm, setPerm] = useState<NotificationPermission | 'unsupported'>('default');
-  const q = fixtureMode() ? '?fixture=1' : '';
+  const q = useFixtureSuffix(mode);
 
   useEffect(() => {
     setPerm(typeof Notification === 'undefined' ? 'unsupported' : Notification.permission);

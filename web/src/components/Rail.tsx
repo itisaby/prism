@@ -1,6 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
+import { useFixtureSuffix } from '../lib/useWorkspaceSocket.ts';
 import { Icon, Logo } from './Icon.tsx';
 import { connectionIcon, loadConnections } from '../lib/connections.ts';
 import { Badge, IdentitySwitch, Modal } from './ui.tsx';
@@ -9,19 +10,19 @@ import type { ConnectionView, Playbook } from '../lib/types.ts';
 
 interface RegistryEntry { name: string; title?: string; description?: string; url: string; tools?: number }
 
-export function Rail({ activeId, user, playbooks, open, onClose, onConnected }: {
-  activeId?: string; user: string; playbooks: Playbook[]; open?: boolean; onClose?: () => void; onConnected?: (c: ConnectionView) => void;
+export function Rail({ activeId, user, playbooks, open, onClose, onConnected, mode }: {
+  mode?: string; activeId?: string; user: string; playbooks: Playbook[]; open?: boolean; onClose?: () => void; onConnected?: (c: ConnectionView) => void;
 }) {
   const [workspaces, setWorkspaces] = useState<{ id: string; title: string; owner: string }[]>([]);
   const [connections, setConnections] = useState<ConnectionView[]>([]);
   const [adding, setAdding] = useState(false);
-  const q = fixtureMode() ? '?fixture=1' : '';
+  const q = useFixtureSuffix(mode as never);
 
   const load = useCallback(() => {
     api<{ id: string; title: string; owner: string }[]>('/workspaces').then(setWorkspaces).catch(() => {});
     loadConnections(true).then(setConnections);
   }, []);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); }, [load, mode]);
 
   return (
     <>

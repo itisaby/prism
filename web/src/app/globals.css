@@ -578,3 +578,12 @@ a.banner:hover { filter: brightness(1.15); }
   .done-hero h2 { font-size: 21px; }
   .learn { flex-direction: column; align-items: stretch; }
 }
+.via { display: inline-flex; align-items: center; gap: 7px; font-size: 11px; color: var(--muted); margin-top: -10px; }
+.via svg { color: var(--accent-ink); }
+.pb-group { display: flex; flex-direction: column; gap: 0; }
+@media (max-width: 860px) {
+  .action-card .card-head .badge { display: none; }
+  .action-label { font-size: 17px !important; }
+  .decide-page .jelly, .decide-page .bubble { display: none; }
+  .replay-banner b { font-size: 13.5px; }
+}

@@ -19,7 +19,7 @@ export interface LiveState {
 }
 export type LiveMode = 'connecting' | 'live' | 'polling' | 'fixture';
 
-export interface Snapshot { workspace: Workspace; incidents: Incident[]; decisions: Decision[]; playbooks: Playbook[]; stats: Stats }
+export interface Snapshot { workspace: Workspace; incidents: Incident[]; decisions: Decision[]; playbooks: Playbook[]; stats: Stats; panelData?: Record<string, PanelDatum> }
 
 type Action = { type: 'msg'; m: ServerMessage } | { type: 'snapshot'; s: Snapshot } | { type: 'reset' };
 
@@ -36,10 +36,15 @@ function upsert<T extends { id: string }>(list: T[], item: T): T[] {
 function reduce(s: LiveState, a: Action): LiveState {
   if (a.type === 'reset') return EMPTY;
   if (a.type === 'snapshot') {
-    const { workspace, incidents, decisions, playbooks, stats } = a.s;
+    const { workspace, incidents, decisions, playbooks, stats, panelData } = a.s;
     // Never let an older snapshot overwrite a newer workspace version from the socket.
     const ws = s.workspace && s.workspace.version > workspace.version ? s.workspace : workspace;
-    return { ...s, workspace: ws, incidents: incidents ?? [], decisions: decisions ?? [], playbooks: playbooks ?? [], stats: stats ?? s.stats };
+    // Latest cached panel data from the server (only fills in panels we have nothing newer for).
+    const merged = { ...s.panelData };
+    for (const [pid, d] of Object.entries(panelData ?? {})) {
+      if (d && (!merged[pid] || merged[pid].at < d.at)) merged[pid] = d;
+    }
+    return { ...s, workspace: ws, incidents: incidents ?? [], decisions: decisions ?? [], playbooks: playbooks ?? [], stats: stats ?? s.stats, panelData: merged };
   }
   const m = a.m;
   switch (m.type) {
@@ -187,4 +192,11 @@ export function useUser(): string {
     return () => window.removeEventListener('prism:user', on);
   }, []);
   return user;
+}
+
+/** "?fixture=1" when in demo-data mode. Empty during SSR/hydration so server and client markup match. */
+export function useFixtureSuffix(mode?: LiveMode): string {
+  const [q, setQ] = useState('');
+  useEffect(() => { setQ(fixtureMode() ? '?fixture=1' : ''); }, [mode]);
+  return q;
 }

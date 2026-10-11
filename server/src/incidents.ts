@@ -11,6 +11,7 @@ import { getWorkspace } from './workspaces.ts';
 
 export let autoInvestigate = true;
 const clearCounts = new Map<string, number>(); // incident id → consecutive healthy evaluations
+const seenCounts = new Map<string, number>();  // `${wsId}|${watcherId}|${resource}` → consecutive failing evaluations
 const investigating = new Set<string>();
 
 const REASON_ALIASES: Record<string, string> = { ErrImagePull: 'ImagePullBackOff', InvalidImageName: 'ImagePullBackOff' };
@@ -42,19 +43,40 @@ export async function onPanelRaw(w: Workspace, p: Panel, raw: unknown) {
     } catch (e) {
       continue; // a broken condition never opens incidents
     }
-    const open = active(w.id).filter(i => i.watcherId === wt.id);
+    lastFindings.set(`${w.id}|${wt.id}`, new Set(findings.map(f => f.resource)));
+    const all = active(w.id);
+    const open = all.filter(i => i.watcherId === wt.id);
+    const failing = new Set(findings.map(f => `${w.id}|${wt.id}|${f.resource}`));
+    for (const k of [...seenCounts.keys()]) if (k.startsWith(`${w.id}|${wt.id}|`) && !failing.has(k)) seenCounts.delete(k);
     for (const f of findings) {
       const existing = open.find(i => i.resource === f.resource);
       if (existing) { clearCounts.delete(existing.id); continue; }
+      // One incident per resource: a second watcher seeing the same cause (pods failing + deployment degraded) attaches to it.
+      const related = all.find(i => i.resource === f.resource);
+      if (related) { clearCounts.delete(related.id); continue; }
+      // Debounce: the finding must hold for two consecutive refreshes, so transient states don't open incidents.
+      const key = `${w.id}|${wt.id}|${f.resource}`;
+      const n = (seenCounts.get(key) ?? 0) + 1;
+      seenCounts.set(key, n);
+      if (n < 2) continue;
+      seenCounts.delete(key);
       openIncident(w, wt, f);
     }
     for (const i of open) {
       if (findings.some(f => f.resource === i.resource)) continue;
+      // Still failing according to another watcher? Then it isn't healthy yet.
+      if (i.status !== 'resolving' && stillFailingElsewhere(w.id, wt.id, i.resource)) continue;
       const n = (clearCounts.get(i.id) ?? 0) + 1;
       clearCounts.set(i.id, n);
       if (n >= 2) resolveIncident(i);
     }
   }
+}
+
+const lastFindings = new Map<string, Set<string>>(); // `${wsId}|${watcherId}` → resources failing at last evaluation
+function stillFailingElsewhere(wsId: string, watcherId: string, resource: string) {
+  for (const [k, set] of lastFindings) if (k.startsWith(wsId + '|') && k !== `${wsId}|${watcherId}` && set.has(resource)) return true;
+  return false;
 }
 
 function openIncident(w: Workspace, wt: Watcher, f: { resource: string; reason: string; detail?: string }) {

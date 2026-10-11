@@ -38,6 +38,9 @@ watcher = {id, panelId, title, condition, severity:"warning"|"critical"}. condit
 result (not the transform output) and returns an ARRAY of findings [{resource, reason, detail?}] — empty when healthy.
 Wrap in [ ] so a single finding is still an array. resource must be stable, e.g. namespace & "/" & app (not the pod name, which changes).
 Add watchers for the things a person would want to be told about (failing pods, unavailable deployments).
+The reason must be a short stable category with no changing numbers ("Waiting too long", not "Waiting 11 min"); put details in detail.
+Use stable failure reasons only (e.g. ImagePullBackOff, CrashLoopBackOff, Degraded), never transient states such as
+ContainerCreating, Pending or Terminating. Prefer one watcher per root cause; PRISM merges findings on the same resource.
 
 # Layout
 12-column grid. layout {x,y,w,h}; h is in rows of ~60px (h 4–6 for tables/charts, 2 for metric rows).
@@ -73,7 +76,10 @@ Rules:
 - Evidence panels are normal PRISM panels (same A2UI + binding rules) scoped to the incident (filter to the resource), 2–3 of them,
   e.g. failing pods for this app, the deployment's revision/image history, warning events. They stay live while the decision waits.
 - The proposed action must be a real WRITE tool with exact arguments that validate against its input schema. Prefer the
-  smallest safe fix (e.g. roll back to the last healthy revision, assign the best-matching available mentor). Don't include dryRun in args; PRISM runs the dry run itself.
+  smallest safe fix (e.g. roll back to the last healthy revision, assign the best-matching available mentor).
+- The fix may be saved as a playbook and replayed the next time the same incident happens, so make the action REUSABLE:
+  don't pin values that change between occurrences (revision numbers, pod names, timestamps). E.g. rollback_deployment
+  without toRevision (it goes to the previous revision). Don't include dryRun in args; PRISM runs the dry run itself.
 - consequences: 2–4 short plain-language lines ("Image goes back to prism/checkout:v1", "2 failing pods get replaced").
 - If you can't find a safe fix, call cannot_decide with what you found.
 `;
