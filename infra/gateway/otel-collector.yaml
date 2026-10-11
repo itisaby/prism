@@ -1,0 +1,45 @@
+# OpenTelemetry Collector between agentgateway and the trace backends.
+#   agentgateway --OTLP gRPC--> collector --> Jaeger   (everything)
+#                                         --> Sentry   (Claude calls + gated MCP writes, allowed or blocked)
+# Panel refreshes hit the gateway every few seconds; they stay in Jaeger and are filtered out of the Sentry pipeline.
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+
+processors:
+  batch: {}
+  filter/sentry:
+    error_mode: ignore
+    traces:
+      span:
+        # Drop a span unless it is an LLM call, a write tool call, or failed/blocked (the reads are the refresh noise).
+        - >-
+          not (status.code == STATUS_CODE_ERROR
+               or name == "POST /v1/messages"
+               or IsMatch(name, "^POST api\\.anthropic\\.com")
+               or IsMatch(name, "^tools/call .*(set_image|rollback_deployment|restart_deployment|scale_deployment|assign_mentor|resolve_help_request|claim_task|update_task_status|create_task|create_issue|stripe_api_write)"))
+
+exporters:
+  otlp/jaeger:
+    endpoint: host.docker.internal:4317
+    tls:
+      insecure: true
+  otlphttp/sentry:
+    traces_endpoint: ${env:SENTRY_OTLP_TRACES_ENDPOINT}
+    headers:
+      x-sentry-auth: "sentry sentry_key=${env:SENTRY_PUBLIC_KEY}"
+    compression: gzip
+    encoding: proto
+
+service:
+  pipelines:
+    traces/jaeger:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp/jaeger]
+    traces/sentry:
+      receivers: [otlp]
+      processors: [filter/sentry, batch]
+      exporters: [otlphttp/sentry]

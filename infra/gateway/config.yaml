@@ -4,10 +4,32 @@
 # A denied call returns HTTP 400 (JSON-RPC -32602 "Unknown tool") and is visible in the access log.
 config:
   adminAddr: 0.0.0.0:15000
+  # Writable state on the prism-gw-data volume: the request log (UI Logs page) and the UI config overlay.
+  # LLM routes/models are UI-managed (see llm-model.sh); defining them here too conflicts with the overlay.
+  database:
+    url: /data/agentgateway.db
+  logging:
+    database:
+      url: /data/agentgateway.db
+  storage:
+    mode: hybrid
+  # Traces for every MCP and LLM request → OpenTelemetry Collector (prism-otel) → Jaeger + Sentry.
+  tracing:
+    otlpEndpoint: http://host.docker.internal:4319
+    otlpProtocol: grpc
+    randomSampling: 'true'
+    fields:
+      add:
+        prism.user: '"x-prism-user" in request.headers ? request.headers["x-prism-user"] : "anonymous"'
+  # Columns on the Logs page: who asked, and what kind of call it was.
+  standardAttributes:
+    user: '"x-prism-user" in request.headers ? request.headers["x-prism-user"] : "anonymous"'
+    group: 'request.path.startsWith("/v1/") ? "LLM" : default(has(mcp.tool.name) ? "MCP " + mcp.methodName + ": " + mcp.tool.name : "MCP " + mcp.methodName, "MCP")'
 binds:
 - port: 7200
   listeners:
-  - name: mcp
+  # Named "llm" on purpose: agentgateway v1.6.0's log store only records LLM traffic or this listener name.
+  - name: llm
     routes:
     - name: k8s
       matches:

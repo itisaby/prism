@@ -1,0 +1,106 @@
+# PRISM's MCP server catalog in agentregistry (v0.4.0, ar.dev/v1alpha1).
+# Applied by ./setup.sh (`arctl apply -f servers.yaml`); re-applying is an upsert.
+#
+# Rules for this file:
+#   - Never put credentials here. The MCP Registry v0.1 API returns
+#     remote headers verbatim, so auth is injected by PRISM / agentgateway.
+#   - `prism.dev/tools` (annotation) is a comma-separated list of key tool
+#     names, shown as hints in PRISM's "Add MCP" dialog.
+#   - `prism.dev/auth` notes how the server authenticates (display only).
+apiVersion: ar.dev/v1alpha1
+kind: MCPServer
+metadata:
+  name: sentry
+  labels:
+    prism.dev/category: observability
+  annotations:
+    prism.dev/auth: oauth
+    prism.dev/tools: search_issues,search_errors,search_traces,search_logs,get_sentry_resource,analyze_issue_with_seer,update_issue,find_projects
+spec:
+  title: Sentry
+  description: "Sentry's hosted MCP server: production errors and exceptions, issues, traces, logs and releases, plus Seer AI root-cause analysis. Sign in with Sentry (OAuth)."
+  remote:
+    type: streamable-http
+    url: https://mcp.sentry.dev/mcp
+---
+apiVersion: ar.dev/v1alpha1
+kind: MCPServer
+metadata:
+  name: nimble
+  labels:
+    prism.dev/category: web-data
+  annotations:
+    prism.dev/auth: api-key
+    prism.dev/tools: nimble_search,nimble_extract,nimble_map,nimble_crawl_run,nimble_agents_run
+spec:
+  title: Nimble
+  description: "Live web data: search the web, extract structured data from any page, map a site's URLs and crawl doc trees in real time. Requires a Nimble API key."
+  remote:
+    type: streamable-http
+    url: https://mcp.nimbleway.com/mcp
+---
+apiVersion: ar.dev/v1alpha1
+kind: MCPServer
+metadata:
+  name: github
+  labels:
+    prism.dev/category: code
+  annotations:
+    prism.dev/auth: personal-access-token
+    prism.dev/tools: search_repositories,list_issues,issue_read,list_pull_requests,pull_request_read,create_pull_request,list_workflow_runs
+spec:
+  title: GitHub
+  description: "GitHub's hosted MCP server: repositories, issues, pull requests and reviews, and Actions workflow runs. Authenticate with a personal access token."
+  remote:
+    type: streamable-http
+    url: https://api.githubcopilot.com/mcp/
+---
+apiVersion: ar.dev/v1alpha1
+kind: MCPServer
+metadata:
+  name: stripe
+  labels:
+    prism.dev/category: payments
+  annotations:
+    prism.dev/auth: secret-key
+    prism.dev/tools: list_customers,list_payment_intents,list_charges,retrieve_balance,list_invoices,create_refund
+spec:
+  title: Stripe
+  description: "Stripe's hosted MCP server: payments, charges, customers, invoices, balances and refunds (use a test-mode secret key)."
+  remote:
+    type: streamable-http
+    url: https://mcp.stripe.com
+---
+apiVersion: ar.dev/v1alpha1
+kind: MCPServer
+metadata:
+  name: prism-kubernetes
+  labels:
+    prism.dev/category: infrastructure
+    prism.dev/demo: "true"
+  annotations:
+    prism.dev/auth: bearer
+    prism.dev/tools: cluster_overview,list_deployments,list_pods,list_events,get_pod_logs,get_usage,describe_deployment,restart_deployment,scale_deployment,set_image,rollback_deployment
+spec:
+  title: Kubernetes (PRISM demo)
+  description: "PRISM demo cluster: pods, deployments, events, logs and resource usage, with approval-gated restarts, scaling and rollbacks. Bearer token."
+  remote:
+    type: streamable-http
+    url: http://localhost:7300/mcp
+---
+apiVersion: ar.dev/v1alpha1
+kind: MCPServer
+metadata:
+  name: prism-event-db
+  labels:
+    prism.dev/category: operations
+    prism.dev/demo: "true"
+  annotations:
+    prism.dev/auth: bearer-optional
+    prism.dev/tools: event_overview,list_help_requests,list_mentors,get_checkins,list_teams,list_tasks,get_schedule,assign_mentor,resolve_help_request
+spec:
+  title: Event DB (PRISM demo)
+  description: "Hackathon operations database: help requests, mentors and assignments, team check-ins, volunteer tasks, judging and the schedule."
+  remote:
+    type: streamable-http
+    url: http://localhost:7101/mcp

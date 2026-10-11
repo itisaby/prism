@@ -11,3 +11,6 @@ server/keys/
 *.db-*
 .DS_Store
 e2e/screenshots/
+
+# agentregistry CLI (downloaded by infra/registry/setup.sh)
+infra/registry/bin/

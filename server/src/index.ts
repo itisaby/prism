@@ -12,6 +12,7 @@ import { BadRequest, Forbidden, approve, decisionFromRecordAction, getDecision, 
 import { investigate, onPanelRaw, resetWorkspace, setAutoInvestigate } from './incidents.ts';
 import { prismMcp } from './prism-mcp.ts';
 import { capture } from './telemetry.ts';
+import { searchRegistry } from './registry.ts';
 import { addConnection, discover, listConnections, loadConnections, removeConnection, view } from './mcp.ts';
 import { getStats, latest, loadValidator, publicWorkspace, refreshPanel, scheduleAll, setRawListener } from './runtime.ts';
 import { Conflict, Invalid, applyOps, canEdit, canView, createWorkspace, getWorkspace, listWorkspaces, saveWorkspace } from './workspaces.ts';
@@ -145,8 +146,12 @@ app.post('/api/admin/auto-investigate', async c => {
   return c.json({ ok: true, on: !!on });
 });
 
-// The agent registry tab in "Add MCP" (agentregistry integration is production path; no suggestions today).
-app.get('/api/registry', c => c.json([]));
+// agentregistry = discovery layer: the "Add MCP" dialog's registry tab searches it (display metadata only).
+app.get('/api/registry', async c => {
+  const found = await searchRegistry(c.req.query('q') ?? '');
+  if (!found.length && !c.req.query('q')) return c.json({ error: 'registry unavailable' }, 404); // hides the tab
+  return c.json(found.map(e => ({ ...e, tools: e.tools?.length, toolNames: e.tools })));
+});
 
 // ---------------------------------------------------------------- boot
 process.on('unhandledRejection', e => { console.error('unhandled rejection (kept running):', e); capture(e); });

@@ -29,12 +29,12 @@ export const config = {
   stripeKey: process.env.STRIPE_SECRET_KEY || '',
   stripeViaGateway: process.env.STRIPE_VIA_GATEWAY === '1',
   nimbleKey: process.env.NIMBLE_API_KEY || '',
-  // USD per million tokens (estimate; override if pricing differs).
+  // USD per million tokens for claude-opus-5-5, matching agentgateway's cost accounting (override via env).
   price: {
-    input: num(process.env.PRISM_PRICE_INPUT, 5),
-    output: num(process.env.PRISM_PRICE_OUTPUT, 25),
-    cacheRead: num(process.env.PRISM_PRICE_CACHE_READ, 0.5),
-    cacheWrite: num(process.env.PRISM_PRICE_CACHE_WRITE, 6.25),
+    input: num(process.env.PRISM_PRICE_INPUT, 4),
+    output: num(process.env.PRISM_PRICE_OUTPUT, 20),
+    cacheRead: num(process.env.PRISM_PRICE_CACHE_READ, 0.2),
+    cacheWrite: num(process.env.PRISM_PRICE_CACHE_WRITE, 5),
   },
   keysDir: path.join(ROOT, 'server', 'keys'),
   jwksPath: path.join(ROOT, 'infra', 'gateway', 'approval-jwks.json'),
