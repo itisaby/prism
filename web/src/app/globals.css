@@ -665,3 +665,20 @@ a.banner:hover { filter: brightness(1.15); }
 .incident-list { display: flex; flex-direction: column; gap: 4px; max-height: 220px; overflow-y: auto; padding-right: 2px; }
 .banner-compact { padding: 6px 12px; font-size: 12px; box-shadow: none; }
 .banner-btn { padding: 3px 10px; height: auto; }
+
+/* Personal views */
+.personal-strip { position: relative; z-index: 4; display: flex; align-items: center; gap: 10px; margin: 12px 24px 0; padding: 7px 12px; border-radius: var(--r-md); font-size: 12.5px; background: var(--accent-soft, #8B6CFF26); border: 1px solid rgba(139,108,255,.35); }
+.personal-strip.is-compact { margin: 0 0 8px; flex-wrap: wrap; }
+.personal-strip b { color: var(--accent-ink, #B9A6FF); white-space: nowrap; }
+.ps-hidden { position: relative; }
+.ps-menu { position: absolute; right: 0; top: calc(100% + 6px); display: flex; flex-direction: column; min-width: 220px; padding: 6px; border-radius: 10px; background: #111; border: 1px solid var(--line-strong, #FFFFFF29); z-index: 20; box-shadow: 0 16px 40px #000a; }
+.ps-menu button { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border: 0; background: none; color: var(--ink, #EDEDED); font-size: 12.5px; text-align: left; border-radius: 6px; cursor: pointer; }
+.ps-menu button:hover { background: rgba(255,255,255,.06); }
+.join-customize { margin: 18px 0 6px; display: flex; flex-direction: column; gap: 8px; }
+.customize-bar { display: flex; align-items: center; gap: 8px; padding: 6px 6px 6px 12px; border-radius: 999px; background: var(--surface, #0A0A0AC7); border: 1px solid rgba(139,108,255,.5); box-shadow: 0 0 24px rgba(139,108,255,.18); }
+.customize-bar input { flex: 1; min-width: 0; background: none; border: 0; outline: none; color: var(--ink, #EDEDED); font: inherit; font-size: 14px; }
+.customize-bar .send { width: 30px; height: 30px; border-radius: 999px; border: 0; background: var(--ink, #EDEDED); color: #000; display: grid; place-items: center; }
+.customize-bar .send:disabled { opacity: .4; }
+.view-note { font-size: 12.5px; padding: 6px 10px; border-radius: 8px; }
+.view-note.ok { color: var(--accent-ink, #B9A6FF); background: rgba(139,108,255,.1); }
+.view-note.bad { color: var(--danger, #FF6166); background: rgba(255,97,102,.08); }

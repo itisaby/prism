@@ -5,9 +5,11 @@ import type { Activity, ActivityKind, ServerMessage } from '../../shared/types.t
 import { log } from './telemetry.ts';
 
 const subscribers = new Map<string, Set<WebSocket>>();
+const socketUser = new WeakMap<WebSocket, string>(); // who is on each socket (personal views differ per person)
 const recent = new Map<string, Activity[]>(); // last activity per workspace, replayed to new subscribers
 
-export function subscribe(workspaceId: string, socket: WebSocket) {
+export function subscribe(workspaceId: string, socket: WebSocket, user = 'arnab') {
+  socketUser.set(socket, user);
   let set = subscribers.get(workspaceId);
   if (!set) subscribers.set(workspaceId, (set = new Set()));
   set.add(socket);
@@ -19,6 +21,20 @@ export function broadcast(workspaceId: string, msg: ServerMessage) {
   if (!set?.size) return;
   const data = JSON.stringify(msg);
   for (const s of set) if (s.readyState === 1) s.send(data);
+}
+
+/** Send each subscriber its own message (e.g. their personal view of the workspace). `make` may skip a user by returning undefined. */
+export async function broadcastEach(workspaceId: string, make: (user: string) => ServerMessage | undefined | Promise<ServerMessage | undefined>) {
+  const set = subscribers.get(workspaceId);
+  if (!set?.size) return;
+  const cache = new Map<string, string | undefined>();
+  for (const s of set) {
+    if (s.readyState !== 1) continue;
+    const user = socketUser.get(s) ?? 'arnab';
+    if (!cache.has(user)) { const m = await make(user); cache.set(user, m ? JSON.stringify(m) : undefined); }
+    const data = cache.get(user);
+    if (data) s.send(data);
+  }
 }
 
 export function activity(workspaceId: string, kind: ActivityKind, text: string, detail?: unknown): Activity {

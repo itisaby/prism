@@ -89,7 +89,26 @@ export interface Workspace {
   watchers: Watcher[];
   members: User[];        // can view + approve (e.g. "judge")
   buildReceipt?: Receipt; // what the initial composition cost
+  /** Set on what a non-owner receives: their personal view of the shared workspace. */
+  personal?: { viewer: User; customizedPanels: string[]; hiddenPanels: { id: string; title: string }[] };
 }
+
+/** A person's own changes to a shared workspace. Bindings and data stay shared; only how it looks changes. */
+export interface PanelOverride {
+  components?: Record<string, unknown>[];
+  layout?: Layout;
+  title?: string;
+  hidden?: boolean;
+  viewTransform?: string;   // JSONata over the panel's shared data model, applied for this person only
+}
+
+export type ViewOp =
+  | { op: 'replace_view'; panelId: string; components: Record<string, unknown>[]; title?: string }
+  | { op: 'move_resize'; panelId: string; layout: Layout }
+  | { op: 'hide_panel'; panelId: string }
+  | { op: 'show_panel'; panelId: string }
+  | { op: 'rename_panel'; panelId: string; title: string }
+  | { op: 'set_view_transform'; panelId: string; transform: string | null };
 
 export type Op =
   | { op: 'add_panel'; panel: Panel }

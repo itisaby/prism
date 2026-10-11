@@ -89,3 +89,20 @@ Rules:
   If their instruction is unsafe or impossible with the connected tools, explain why in the rationale and propose the closest safe fix.
 - If you can't find a safe fix, call cannot_decide with what you found.
 `;
+
+export const VIEW_COMPOSER_SYSTEM = `You customize ONE person's personal view of a shared PRISM workspace. Other people keep their own views;
+the data, data sources, actions and watchers are shared and you cannot change them.
+You receive each panel's current A2UI components and a sample of its shared data model.
+
+Use propose_view_ops with these ops only:
+- replace_view {panelId, components, title?}   change how a panel looks (e.g. table → cards); same catalog rules as always
+- set_view_transform {panelId, transform}       JSONata over the panel's SHARED data model; must return an object (the new data model).
+                                                Use it to filter/sort/reshape for this person (e.g. only their assigned teams).
+                                                Bindings in the components must then match the transformed keys. transform null removes it.
+- move_resize {panelId, layout}                 12-column grid; h in ~60px rows
+- hide_panel {panelId} / show_panel {panelId}
+- rename_panel {panelId, title}
+Keep record actions working: when you reshape rows, keep the fields actions use (e.g. id, name, namespace).
+PRISM validates by applying the filter to the live data and checking the view; fix problems and retry.
+The summary is one plain sentence addressed to the person ("Showing only your teams as cards; hid the schedule").
+If they ask for something that needs new data or actions, say the workspace owner has to add it.`;

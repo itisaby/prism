@@ -5,7 +5,8 @@ import { WebSocketServer } from 'ws';
 import type { Decision, Incident, Playbook } from '../../shared/types.ts';
 import { initApprovalKeys } from './approval.ts';
 import { recentActivity, subscribe } from './bus.ts';
-import { compose } from './composer.ts';
+import { compose, composeView } from './composer.ts';
+import { ViewInvalid, applyViewOps, broadcastPanelData, broadcastWorkspace, dataFor, effectiveWorkspace, resetView } from './views.ts';
 import { config } from './config.ts';
 import { store } from './db.ts';
 import { BadRequest, Forbidden, approve, decisionFromRecordAction, getDecision, refreshEvidence, reject, savePlaybook } from './decisions.ts';
@@ -15,8 +16,8 @@ import { capture } from './telemetry.ts';
 import { searchRegistry } from './registry.ts';
 import { RESEARCH_CONNECTION, RESEARCH_TOOL } from './research.ts';
 import { addConnection, discover, listConnections, loadConnections, removeConnection, view } from './mcp.ts';
-import { getStats, latest, loadValidator, publicWorkspace, refreshPanel, scheduleAll, setRawListener } from './runtime.ts';
-import { Conflict, Invalid, applyOps, canEdit, canView, createWorkspace, deleteWorkspace, getWorkspace, listWorkspaces, saveWorkspace } from './workspaces.ts';
+import { getStats, latest, loadValidator, publicWorkspace, refreshPanel, scheduleAll, setPanelDataEmitter, setRawListener } from './runtime.ts';
+import { Conflict, Invalid, applyOps, canEdit, canView, createWorkspace, deleteWorkspace, getWorkspace, listWorkspaces, saveWorkspace, setWorkspaceEmitter } from './workspaces.ts';
 
 const app = new Hono();
 const userOf = (c: Context) => (c.req.header('x-prism-user') || c.req.query('as') || 'arnab').toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 32) || 'arnab';
@@ -24,6 +25,7 @@ const userOf = (c: Context) => (c.req.header('x-prism-user') || c.req.query('as'
 app.onError((e, c) => {
   if (e instanceof Conflict) return c.json({ error: e.message }, 409);
   if (e instanceof Invalid) return c.json({ error: 'invalid', problems: e.problems }, 400);
+  if (e instanceof ViewInvalid) return c.json({ error: 'invalid', problems: e.problems }, 400);
   if (e instanceof BadRequest) return c.json({ error: e.message }, 400);
   if (e instanceof Forbidden) return c.json({ error: e.message }, 403);
   console.error(e);
@@ -67,15 +69,18 @@ app.post('/api/workspaces', async c => {
   const w = createWorkspace(userOf(c), body.title);
   return c.json(publicWorkspace(w));
 });
-app.get('/api/workspaces/:id', c => {
+app.get('/api/workspaces/:id', async c => {
   const w = wsOr404(c);
+  const user = userOf(c);
+  const panelData: Record<string, unknown> = {};
+  for (const p of w.panels) { const l = latest(w.id, p.id); if (l) panelData[p.id] = { ...l, data: await dataFor(w.id, user, p.id, l.data) }; }
   return c.json({
-    workspace: publicWorkspace(w),
+    workspace: effectiveWorkspace(w, user),
     incidents: store.list<Incident>('incident', w.id),
     decisions: store.list<Decision>('decision', w.id),
     playbooks: store.list<Playbook>('playbook', w.id),
     stats: getStats(w.id),
-    panelData: Object.fromEntries(w.panels.map(p => [p.id, latest(w.id, p.id)]).filter(([, v]) => v)),
+    panelData,
   });
 });
 app.delete('/api/workspaces/:id', c => {
@@ -85,17 +90,27 @@ app.delete('/api/workspaces/:id', c => {
 });
 app.post('/api/workspaces/:id/compose', async c => {
   const w = wsOr404(c);
-  if (!canEdit(w, userOf(c))) throw new Forbidden('only the owner can change this workspace');
   const { prompt } = await c.req.json();
   if (!prompt?.trim()) throw new BadRequest('prompt is required');
+  if (!canEdit(w, userOf(c))) return c.json(await composeView(w.id, userOf(c), String(prompt).slice(0, 2000)));
   const r = await compose(w.id, userOf(c), String(prompt).slice(0, 2000));
   return c.json({ ...r, workspace: r.workspace ? publicWorkspace(r.workspace) : undefined });
 });
 app.post('/api/workspaces/:id/ops', async c => {
   const w = wsOr404(c);
-  if (!canEdit(w, userOf(c))) throw new Forbidden('only the owner can change this workspace');
   const { baseVersion, ops } = await c.req.json();
+  if (!canEdit(w, userOf(c))) {
+    // Everyone else edits their own view: layout moves and view ops only.
+    const viewOps = (ops ?? []).filter((o: { op: string }) => ['move_resize', 'replace_view', 'hide_panel', 'show_panel', 'rename_panel', 'set_view_transform'].includes(o.op));
+    if (viewOps.length !== (ops ?? []).length) throw new Forbidden('only the owner can change data sources, actions or watchers');
+    return c.json(await applyViewOps(w, userOf(c), viewOps));
+  }
   return c.json(publicWorkspace(await applyOps(w.id, userOf(c), baseVersion, ops)));
+});
+app.post('/api/workspaces/:id/view/reset', c => {
+  const w = wsOr404(c);
+  if (canEdit(w, userOf(c))) throw new BadRequest('the owner edits the shared workspace; there is no personal view to reset');
+  return c.json(resetView(w, userOf(c)));
 });
 app.post('/api/workspaces/:id/members', async c => {
   const w = wsOr404(c);
@@ -107,7 +122,10 @@ app.post('/api/workspaces/:id/members', async c => {
 app.post('/api/workspaces/:id/panels/:pid/refresh', async c => {
   const w = wsOr404(c);
   const pid = c.req.param('pid');
-  if (w.panels.some(p => p.id === pid)) return c.json(await refreshPanel(w.id, pid) ?? latest(w.id, pid) ?? {});
+  if (w.panels.some(p => p.id === pid)) {
+    const r = await refreshPanel(w.id, pid) ?? latest(w.id, pid);
+    return c.json(r ? { ...r, data: await dataFor(w.id, userOf(c), pid, r.data) } : {});
+  }
   const ev = await refreshEvidence(w.id, pid);
   if (!ev) throw new BadRequest('unknown panel');
   return c.json({ data: ev.data, at: new Date().toISOString(), error: ev.error });
@@ -179,6 +197,8 @@ for (const i of store.list<Incident>('incident')) if (i.status === 'investigatin
 await loadValidator();
 loadConnections();
 setRawListener((w, p, raw) => { void onPanelRaw(w, p, raw); });
+setWorkspaceEmitter(broadcastWorkspace);
+setPanelDataEmitter(broadcastPanelData);
 scheduleAll();
 
 const server = serve({ fetch: app.fetch, port: config.port, hostname: '0.0.0.0' }, info =>
@@ -193,10 +213,10 @@ const wss = new WebSocketServer({ noServer: true });
   const w = getWorkspace(wsId);
   if (!w || !canView(w, user)) return socket.destroy();
   wss.handleUpgrade(req, socket, head, sock => {
-    subscribe(wsId, sock);
+    subscribe(wsId, sock, user);
     const send = (m: unknown) => sock.send(JSON.stringify(m));
-    send({ type: 'workspace', workspace: publicWorkspace(getWorkspace(wsId)!) });
-    for (const p of w.panels) { const l = latest(wsId, p.id); if (l) send({ type: 'panel-data', panelId: p.id, ...l }); }
+    send({ type: 'workspace', workspace: effectiveWorkspace(getWorkspace(wsId)!, user) });
+    for (const p of w.panels) { const l = latest(wsId, p.id); if (l) void dataFor(wsId, user, p.id, l.data).then(data => send({ type: 'panel-data', panelId: p.id, ...l, data })); }
     for (const i of store.list<Incident>('incident', wsId)) send({ type: 'incident', incident: i });
     for (const d of store.list<Decision>('decision', wsId)) send({ type: 'decision', decision: d });
     for (const pb of store.list<Playbook>('playbook', wsId)) send({ type: 'playbook', playbook: pb });

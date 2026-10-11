@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Decor } from './Decor.tsx';
 import { Icon, Logo } from './Icon.tsx';
 import { PanelCard } from './PanelCard.tsx';
+import { CustomizeBar, PersonalStrip } from './PersonalView.tsx';
 import { Badge, LiveDot } from './ui.tsx';
 import { fixtureMode, setUser } from '../lib/api.ts';
 import { useConnectionNames } from '../lib/connections.ts';
@@ -26,7 +27,8 @@ export function JoinView({ wsId }: { wsId: string }) {
 
 function JoinInner({ wsId, user }: { wsId: string; user: string }) {
   const now = useNow(1000);
-  const { state, mode, error } = useWorkspaceSocket(wsId);
+  const { state, mode, error, applyMessage } = useWorkspaceSocket(wsId);
+  const [viewNote, setViewNote] = useState<{ text: string; ok: boolean }>();
   const { workspace, decisions, incidents, panelData } = state;
   const names = useConnectionNames();
   const [perm, setPerm] = useState<NotificationPermission | 'unsupported'>('default');
@@ -131,6 +133,15 @@ function JoinInner({ wsId, user }: { wsId: string; user: string }) {
                 <span className="mono small muted">{d.decidedBy ? `${cap(d.decidedBy)} · ` : ''}{clock(d.decidedAt ?? d.createdAt)}</span>
               </Link>
             ))}
+          </div>
+        )}
+
+        {workspace && (
+          <div className="join-customize">
+            <div className="mono eyebrow">Your view</div>
+            {workspace.personal && <PersonalStrip workspace={workspace} compact onChanged={w => applyMessage({ type: 'workspace', workspace: w })} />}
+            <CustomizeBar workspace={workspace} onDone={(text, ok) => setViewNote({ text, ok })} />
+            {viewNote && <div className={`view-note ${viewNote.ok ? 'ok' : 'bad'}`}>{viewNote.text}</div>}
           </div>
         )}
 

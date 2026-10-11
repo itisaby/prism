@@ -82,12 +82,23 @@ export async function validatePanel(p: Panel, user: string): Promise<{ problems:
   return { problems, ...out };
 }
 
+/** Validate an A2UI view against a data model (used by personal views, which change view + filter but not bindings). */
+export function validateView(panel: Panel, data: unknown): string[] {
+  if (!Array.isArray(panel.components) || !panel.components.some(c => c?.id === 'root')) return ['"components" must be an A2UI list with one id "root"'];
+  if (data === null || typeof data !== 'object' || Array.isArray(data)) return ['the view filter must return an object (the A2UI data model)'];
+  return validateSurface ? validateSurface(renderComponents(panel), data) : [];
+}
+
 // ---------------------------------------------------------------- refresh loop
 type RawListener = (workspace: Workspace, panel: Panel, raw: unknown) => void;
 const timers = new Map<string, NodeJS.Timeout[]>();
 const lastData = new Map<string, { data: unknown; at: string; error?: string }>(); // `${ws}|${panel}`
 const statsCache = new Map<string, Stats>();
 let onRaw: RawListener = () => {};
+type PanelMsg = { type: 'panel-data'; panelId: string; data: unknown; at: string; error?: string };
+let emitPanelData = (wsId: string, msg: PanelMsg) => broadcast(wsId, msg);
+/** Personal views re-shape shared panel data per person; index.ts installs that fan-out here. */
+export const setPanelDataEmitter = (fn: (wsId: string, msg: PanelMsg) => void) => { emitPanelData = fn; };
 export const setRawListener = (fn: RawListener) => { onRaw = fn; };
 
 export function getStats(wsId: string): Stats {
@@ -127,7 +138,7 @@ export async function refreshPanel(wsId: string, panelId: string) {
     metric.distribution('prism.panel.refresh_ms', Date.now() - t0, 'millisecond', tags);
     const entry = { data, at: new Date().toISOString() };
     lastData.set(key, entry);
-    broadcast(wsId, { type: 'panel-data', panelId, ...entry });
+    emitPanelData(wsId, { type: 'panel-data', panelId, ...entry });
     const s = getStats(wsId);
     s.refreshes++;
     statsDirty.add(wsId);
@@ -139,7 +150,7 @@ export async function refreshPanel(wsId: string, panelId: string) {
     const prev = lastData.get(key);
     const entry = { data: prev?.data, at: prev?.at ?? new Date().toISOString(), error: (e as Error).message };
     lastData.set(key, entry);
-    broadcast(wsId, { type: 'panel-data', panelId, data: entry.data, at: entry.at, error: entry.error });
+    emitPanelData(wsId, { type: 'panel-data', panelId, data: entry.data, at: entry.at, error: entry.error });
   }
 }
 

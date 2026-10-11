@@ -27,7 +27,7 @@ export function deleteWorkspace(id: string, user: string) {
   if (!w) return false;
   if (!canEdit(w, user)) throw new Invalid(['only the owner can delete this workspace']);
   unschedule(id);
-  for (const kind of ['incident', 'decision', 'playbook', 'agent-transcript', 'research'] as const) store.deleteForWorkspace(kind, id);
+  for (const kind of ['incident', 'decision', 'playbook', 'agent-transcript', 'research', 'view'] as const) store.deleteForWorkspace(kind, id);
   store.delete('stats', id);
   store.delete('stats', `${id}:incidents`);
   store.delete('workspace', id);
@@ -36,9 +36,13 @@ export function deleteWorkspace(id: string, user: string) {
   return true;
 }
 
+let emitWorkspace = (w: Workspace) => broadcast(w.id, { type: 'workspace', workspace: publicWorkspace(w) });
+/** Each person sees their own merged view; index.ts installs that fan-out here. */
+export const setWorkspaceEmitter = (fn: (w: Workspace) => void) => { emitWorkspace = fn; };
+
 export function saveWorkspace(w: Workspace) {
   store.put('workspace', w, w.id);
-  broadcast(w.id, { type: 'workspace', workspace: publicWorkspace(w) });
+  emitWorkspace(w);
   return w;
 }
 

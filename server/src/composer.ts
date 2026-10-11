@@ -5,7 +5,9 @@ import type { Op, Receipt, Workspace } from '../../shared/types.ts';
 import { ROOT } from './config.ts';
 import { activity, broadcast } from './bus.ts';
 import { AgentStopped, READ_TOOL, capabilitiesText, emptyReceipt, runReadTool, toolLoop } from './llm.ts';
-import { CATALOG_GUIDE, COMPOSER_SYSTEM } from './prompts.ts';
+import { CATALOG_GUIDE, COMPOSER_SYSTEM, VIEW_COMPOSER_SYSTEM } from './prompts.ts';
+import { ViewInvalid, applyViewOps, effectiveWorkspace } from './views.ts';
+import { latest } from './runtime.ts';
 import { addModelCost } from './runtime.ts';
 import { START_RESEARCH_DEF, startResearch } from './research.ts';
 import { Conflict, Invalid, applyOps, getWorkspace, saveWorkspace } from './workspaces.ts';
@@ -111,3 +113,50 @@ const summarize = (w: Workspace) => ({
   panels: w.panels.map(p => ({ id: p.id, title: p.title, binding: p.binding, components: p.components, layout: p.layout, refreshSec: p.refreshSec, actions: p.actions })),
   watchers: w.watchers,
 });
+
+/** Personal composer: a non-owner reshapes their own view. One model loop, no data-source changes. */
+export async function composeView(wsId: string, user: string, prompt: string): Promise<{ summary: string; receipt: Receipt; workspace?: Workspace }> {
+  const key = `${wsId}|${user}`;
+  if (running.has(key)) throw new Error('Your view is already being changed.');
+  running.add(key);
+  const receipt = emptyReceipt();
+  activity(wsId, 'info', `${user} is customizing their view: “${prompt}”`);
+  const w = getWorkspace(wsId)!;
+  const mine = effectiveWorkspace(w, user);
+  const panels = mine.panels.map(p => ({
+    id: p.id, title: p.title, layout: p.layout,
+    components: p.components.map(c => { const { recordActions, ...rest } = c as Record<string, unknown>; return rest; }),
+    actionFields: (p.actions ?? []).map(a => ({ label: a.label, recordKey: a.recordKey, uses: Object.values(a.args).flatMap(v => ('record' in v ? [v.record] : [])) })),
+    sharedDataSample: JSON.stringify(latest(wsId, p.id)?.data ?? null).slice(0, 2500),
+  }));
+  let proposals = 0;
+  try {
+    const result: any = await toolLoop({
+      wsId, user, label: 'View composer', receipt, maxTurns: 6,
+      system: VIEW_COMPOSER_SYSTEM, stablePrefix: CATALOG_GUIDE,
+      prompt: `Person: ${user}\nRequest: ${prompt}\n\nTheir view now (hidden: ${JSON.stringify(mine.personal?.hiddenPanels ?? [])}):\n${JSON.stringify(panels)}`,
+      tools: [{
+        def: {
+          name: 'propose_view_ops',
+          description: 'Apply personal view ops for this person only. PRISM applies any filter to the live shared data and validates the A2UI view.',
+          input_schema: { type: 'object', properties: { summary: { type: 'string' }, ops: { type: 'array', items: { type: 'object' } } }, required: ['summary', 'ops'] },
+        },
+        run: async input => {
+          proposals++;
+          try {
+            const ws = await applyViewOps(getWorkspace(wsId)!, user, input.ops ?? []);
+            return { done: { summary: input.summary, workspace: ws } };
+          } catch (e) {
+            if (e instanceof ViewInvalid) return proposals >= 3 ? { done: { failed: e.problems.slice(0, 3).join('; ') } } : { error: 'Not applied. Fix:\n- ' + e.problems.join('\n- ') };
+            throw e;
+          }
+        },
+      }],
+    });
+    const d = result?.done ?? {};
+    addModelCost(wsId, receipt.modelCalls, receipt.costUsd);
+    return { summary: d.summary ?? d.failed ?? d.text ?? 'No changes.', receipt, workspace: d.workspace };
+  } finally {
+    running.delete(key);
+  }
+}

@@ -7,6 +7,7 @@ import { Decor } from './Decor.tsx';
 import { Icon } from './Icon.tsx';
 import { PanelCard } from './PanelCard.tsx';
 import { Rail } from './Rail.tsx';
+import { PersonalStrip } from './PersonalView.tsx';
 import { Badge, LiveDot, QrModal, useToasts } from './ui.tsx';
 import { api, ApiError, fixtureMode } from '../lib/api.ts';
 import { calls, clock, receiptLine, usd } from '../lib/format.ts';
@@ -155,6 +156,7 @@ export function WorkspaceView({ id }: { id: string }) {
           <button className="btn btn-primary btn-sm" onClick={() => setShare(true)}><Icon name="share" size={14} />Share</button>
         </header>
 
+        {workspace?.personal && <PersonalStrip workspace={workspace} onChanged={w => applyMessage({ type: 'workspace', workspace: w })} />}
         {openIncidents.length > 0 && <IncidentStack incidents={openIncidents} decisions={decisions} q={q} onInvestigate={investigate} />}
         {pending.filter(d => !d.incidentId).map(d => (
           <Link key={d.id} href={`/decide/${d.id}${q}`} className="banner banner-accent">
@@ -173,7 +175,7 @@ export function WorkspaceView({ id }: { id: string }) {
           ))}
         </div>
 
-        <ChatBar busy={!!composing} onSend={compose} />
+        <ChatBar busy={!!composing} onSend={compose} personal={!!workspace?.personal} />
       </main>
       {inspector && <Inspector activity={activity} stats={stats} onClose={() => setInspector(false)} />}
       <QrModal open={share} onClose={() => setShare(false)} url={shareUrl} title={workspace?.title ?? 'this workspace'} />
@@ -295,7 +297,7 @@ function IncidentBanner({ incident, decision, q, onInvestigate, compact }: {
   return waiting && incident.decisionId ? <Link href={`/decide/${incident.decisionId}${q}`} className={cls}>{body}</Link> : <div className={cls}>{body}</div>;
 }
 
-function ChatBar({ busy, onSend }: { busy: boolean; onSend: (p: string) => void }) {
+function ChatBar({ busy, onSend, personal }: { busy: boolean; onSend: (p: string) => void; personal?: boolean }) {
   const [text, setText] = useState('');
   const ref = useRef<HTMLInputElement>(null);
   useEffect(() => {
@@ -306,7 +308,7 @@ function ChatBar({ busy, onSend }: { busy: boolean; onSend: (p: string) => void 
   return (
     <form className={`chatbar ${busy ? 'is-busy' : ''}`} onSubmit={e => { e.preventDefault(); if (!text.trim() || busy) return; onSend(text.trim()); setText(''); }}>
       <Icon name="sparkles" size={16} className="chat-ic" />
-      <input ref={ref} value={text} onChange={e => setText(e.target.value)} placeholder={busy ? 'Composing… the inspector shows each step' : 'Change this workspace: “add warning events”, “make CPU full width”…'} disabled={busy} />
+      <input ref={ref} value={text} onChange={e => setText(e.target.value)} placeholder={busy ? 'Composing… the inspector shows each step' : personal ? 'Customize your view: “only my teams, as cards”, “hide the schedule”…' : 'Change this workspace: “add warning events”, “make CPU full width”…'} disabled={busy} />
       <span className="mono kbd hide-mobile">⌘K</span>
       <button className="send" disabled={busy || !text.trim()} aria-label="Send">{busy ? <span className="spinner spinner-dark" /> : <Icon name="arrow-up" size={15} strokeWidth={2.2} />}</button>
     </form>
